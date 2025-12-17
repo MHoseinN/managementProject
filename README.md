@@ -11,8 +11,8 @@
 ```bash
 cd server
 npm install
-# تنظیم .env
-echo "MONGODB_URI=mongodb://localhost:27017/project-management" > .env
+# تنظیم .env (اتصال دائمی به MongoDB داکر)
+echo "MONGODB_URI=mongodb://root:example@localhost:27017/project-management?authSource=admin" > .env
 echo "JWT_SECRET=your-secret-key" >> .env
 echo "PORT=5000" >> .env
 
@@ -68,3 +68,23 @@ npm run dev
 ### Messages
 - `POST /api/messages/send` - ارسال پیام
 - `GET /api/messages` - دریافت پیام‌ها
+
+## اتصال دائمی دیتابیس (Docker)
+
+برای اجرای MongoDB با ذخیره‌سازی پایدار:
+
+```bash
+# از ریشه پروژه
+docker compose up -d  # یا: docker-compose up -d
+
+# تست اتصال
+docker ps | grep mongo
+```
+
+پس از بالا آمدن دیتابیس، سرور Backend را اجرا و اسکریپت seed را برای داده‌های نمونه بزنید:
+
+```bash
+cd server
+node seed.js
+npm run dev
+```
