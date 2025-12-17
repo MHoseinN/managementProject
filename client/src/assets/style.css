@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --dark-green: #1b4d3e;
+  --light-green: #2d7a5c;
+  --orange: #e8932f;
+  --dark-bg: #0f1419;
+  --card-bg: #1a1f2a;
+  --text-light: #f0f0f0;
+}
+
+* {
+  color: var(--text-light);
+}
+
+body {
+  background-color: var(--dark-bg);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.btn-primary {
+  @apply px-6 py-2 bg-orange text-black rounded-lg font-semibold hover:bg-orange/90 transition;
+}
+
+.btn-secondary {
+  @apply px-6 py-2 bg-dark-green text-white rounded-lg font-semibold hover:bg-light-green transition;
+}
+
+.card {
+  @apply bg-card-bg border border-dark-green/30 rounded-lg p-4;
+}
