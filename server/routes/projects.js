@@ -13,5 +13,8 @@ router.post('/grade', authMiddleware, roleMiddleware('teacher'), projectCtrl.sub
 router.get('/student', authMiddleware, roleMiddleware('student'), projectCtrl.getStudentProjects);
 router.get('/advisor', authMiddleware, roleMiddleware('teacher'), projectCtrl.getAdvisorProjects);
 router.get('/examiner', authMiddleware, roleMiddleware('teacher'), projectCtrl.getExaminerProjects);
+router.get('/:projectId', authMiddleware, roleMiddleware('teacher'), projectCtrl.getProjectById);
+
+router.post('/reject-topics', authMiddleware, roleMiddleware('teacher'), projectCtrl.rejectTopics);
 
 export default router;

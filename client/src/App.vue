@@ -15,20 +15,17 @@
   </div>
 </template>
 
-<script>
-export default {
-  data() {
-    return {
-      token: localStorage.getItem('token')
-    };
-  },
-  methods: {
-    logout() {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      this.$router.push('/');
-      location.reload();
-    }
-  }
+<script setup>
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
+const token = ref(localStorage.getItem('token'));
+
+const logout = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  router.push('/');
+  location.reload();
 };
 </script>

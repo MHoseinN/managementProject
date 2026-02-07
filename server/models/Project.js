@@ -10,7 +10,7 @@ const projectSchema = new mongoose.Schema({
   managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   status: { 
     type: String, 
-    enum: ['pending', 'topic_submitted', 'topic_approved', 'scheduled', 'defended', 'graded'],
+    enum: ['pending', 'active', 'topic_submitted', 'topic_approved', 'scheduled', 'defended', 'graded'],
     default: 'pending'
   },
   defenseDate: Date,
@@ -18,7 +18,11 @@ const projectSchema = new mongoose.Schema({
   grade: Number,
   report: String,
   term: { type: String, required: true }, // e.g., "1404-1" for odd semester
-  proposedTopics: [String],
+  proposedTopics: [{
+    name: String,
+    description: String,
+    priority: Number
+  }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

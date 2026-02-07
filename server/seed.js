@@ -2,19 +2,27 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import User from './models/User.js';
 import Capacity from './models/Capacity.js';
+import Project from './models/Project.js';
 import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
 const seedDatabase = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/project-management');
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/managementProject');
     console.log('✓ Connected to MongoDB');
 
-    // Clear existing data
-    await User.deleteMany({});
-    await Capacity.deleteMany({});
-    console.log('✓ Cleared existing data');
+    // Check if data already exists
+    const existingUsers = await User.countDocuments({});
+    if (existingUsers > 0) {
+      console.log('\n⚠️  Database already has data. Skipping seed operation.');
+      console.log(`   Found ${existingUsers} users in database.`);
+      console.log('\n💡 To reset the database, use: node scripts/resetDatabase.js\n');
+      await mongoose.connection.close();
+      return;
+    }
+
+    console.log('✓ Database is empty, starting seed...\n');
 
     // Create Admin
     const adminPassword = await bcrypt.hash('admin0123', 10);
@@ -93,6 +101,32 @@ const seedDatabase = async () => {
       enrolled: 0
     });
     console.log('✓ Capacity created:', capacity._id);
+
+    // Create Project with new proposedTopics structure
+    const project = await Project.create({
+      projectCode: 'PRJ-001',
+      studentId: student._id,
+      advisorId: teacher1._id,
+      examinerId: teacher2._id,
+      managerId: manager._id,
+      status: 'active',
+      term: '1404-1',
+      proposedTopics: [
+        {
+          name: 'سیستم مدیریت هوشمند',
+          description: 'یک سیستم مدیریت پروژه کامل با ویژگی‌های پیشرفته'
+        },
+        {
+          name: 'اپلیکیشن موبایل یادگیری',
+          description: 'یک اپلیکیشن آموزشی برای یادگیری مفاهیم برنامه‌نویسی'
+        },
+        {
+          name: 'پلتفرم تجارت الکترونیکی',
+          description: 'یک فروشگاه آنلاین با سیستم پرداخت و سفارش‌دهی'
+        }
+      ]
+    });
+    console.log('✓ Project created:', project._id);
 
     console.log('\n✓✓✓ Database seeded successfully! ✓✓✓\n');
     console.log('Login Credentials:');

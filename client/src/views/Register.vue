@@ -32,34 +32,33 @@
         </form>
 
         <div v-if="message" class="mt-4 p-2 bg-green-900/30 border border-green-500 rounded text-green-400">{{ message }}</div>
-        <div v-if="error" class="mt-4 p-2 bg-red-900/30 border border-red-500 rounded text-red-400">{{ error }}</div>
+        <div v-if="error" class="mt-4 p-2 bg-dark-green/10 border border-dark-green rounded text-dark-green">{{ error }}</div>
         <router-link to="/login" class="block text-center mt-4 text-orange hover:underline">حساب دارید؟</router-link>
       </div>
     </div>
   </div>
 </template>
 
-<script>
+<script setup>
+import { reactive, ref } from 'vue';
 import api from '../api.js';
 
-export default {
-  data() {
-    return {
-      form: { role: 'student', firstName: '', lastName: '', nationalId: '', identityNumber: '', major: 'کامپیوتر' },
-      error: '',
-      message: ''
-    };
-  },
-  methods: {
-    async register() {
-      try {
-        await api.post('/auth/register', this.form);
-        this.message = 'ثبت نام موفق! در انتظار تایید ادمین...';
-        this.form = { role: 'student', firstName: '', lastName: '', nationalId: '', identityNumber: '', major: 'کامپیوتر' };
-      } catch (err) {
-        this.error = err.response?.data?.error || 'خطا در ثبت نام';
-      }
-    }
+const form = reactive({ role: 'student', firstName: '', lastName: '', nationalId: '', identityNumber: '', major: 'کامپیوتر' });
+const error = ref('');
+const message = ref('');
+
+const register = async () => {
+  try {
+    await api.post('/auth/register', form);
+    message.value = 'ثبت نام موفق! در انتظار تایید ادمین...';
+    form.role = 'student';
+    form.firstName = '';
+    form.lastName = '';
+    form.nationalId = '';
+    form.identityNumber = '';
+    form.major = 'کامپیوتر';
+  } catch (err) {
+    error.value = err.response?.data?.error || 'خطا در ثبت نام';
   }
 };
 </script>

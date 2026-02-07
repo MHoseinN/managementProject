@@ -6,6 +6,7 @@ import StudentPortal from './views/StudentPortal.vue';
 import TeacherPortal from './views/TeacherPortal.vue';
 import ManagerPortal from './views/ManagerPortal.vue';
 import AdminPortal from './views/AdminPortal.vue';
+import StudentDetailView from './views/StudentDetailView.vue';
 
 const routes = [
   { path: '/', component: Home },
@@ -19,6 +20,11 @@ const routes = [
   { 
     path: '/teacher', 
     component: TeacherPortal,
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  { 
+    path: '/teacher/student/:projectId', 
+    component: StudentDetailView,
     meta: { requiresAuth: true, role: 'teacher' }
   },
   { 

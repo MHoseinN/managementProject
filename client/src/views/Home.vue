@@ -13,18 +13,11 @@
         <router-link to="/register" class="block">
           <button class="w-full btn-secondary text-lg py-3">ثبت نام</button>
         </router-link>
-
-        <div class="border-t border-dark-green/30 pt-4 mt-4">
-          <p class="text-sm text-gray-400 text-center mb-2">نام کاربری ادمین: admin01</p>
-          <p class="text-sm text-gray-400 text-center">رمز عبور ادمین: admin0123</p>
-        </div>
       </div>
     </div>
   </div>
 </template>
 
-<script>
-export default {
-  name: 'Home'
-};
+<script setup>
+defineOptions({ name: 'Home' });
 </script>

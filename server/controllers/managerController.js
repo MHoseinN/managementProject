@@ -3,7 +3,7 @@ import Project from '../models/Project.js';
 import User from '../models/User.js';
 import DefenseSlot from '../models/DefenseSlot.js';
 
-// Helper: Find next available 30-min slot for an examiner
+// Helper: Find next available 30-min slot for an examiner (kept for future use)
 const findNextAvailableSlot = async (examinerId, startDate) => {
   const slots = [
     { hours: 8, minutes: 0 },
@@ -54,43 +54,65 @@ const findNextAvailableSlot = async (examinerId, startDate) => {
   throw new Error('No available slots found for examiner');
 };
 
-// Helper: Assign advisor & examiner (load-balanced)
-const assignTeam = async (advisors, examiners) => {
-  const advisorAssignments = {};
-  const examinerAssignments = {};
-
-  for (const advisor of advisors) {
-    advisorAssignments[advisor._id] = 0;
-  }
-  for (const examiner of examiners) {
-    examinerAssignments[examiner._id] = 0;
+// Helper: Assign advisor & examiner among teachers of the same major (load-balanced)
+const assignBalancedTeachers = async ({ major, term }) => {
+  const teachers = await User.find({ role: 'teacher', major }).lean();
+  if (!teachers.length || teachers.length < 2) {
+    throw new Error('Not enough teachers available for assignment');
   }
 
-  const projects = await Project.find({
-    $or: [
-      { status: { $in: ['approved', 'defense_scheduled'] } },
-      { advisorId: { $exists: true, $ne: null } }
-    ]
+  const teacherIds = teachers.map(t => String(t._id));
+  const counts = teacherIds.reduce((acc, id) => {
+    acc[id] = { advisor: 0, examiner: 0 };
+    return acc;
+  }, {});
+
+  // Count current term assignments to balance load
+  const existing = await Project.find({ term, advisorId: { $ne: null } }).select('advisorId examinerId').lean();
+  for (const p of existing) {
+    if (p.advisorId && counts[String(p.advisorId)]) counts[String(p.advisorId)].advisor += 1;
+    if (p.examinerId && counts[String(p.examinerId)]) counts[String(p.examinerId)].examiner += 1;
+  }
+
+  // Choose advisor: min advisor count, tie-break by min examiner then by id
+  const sortedByAdvisor = teacherIds.slice().sort((a, b) => {
+    if (counts[a].advisor !== counts[b].advisor) return counts[a].advisor - counts[b].advisor;
+    if (counts[a].examiner !== counts[b].examiner) return counts[a].examiner - counts[b].examiner;
+    return a.localeCompare(b);
   });
 
-  for (const project of projects) {
-    if (project.advisorId) {
-      advisorAssignments[project.advisorId]++;
-    }
-    if (project.examinerId) {
-      examinerAssignments[project.examinerId]++;
+  const advisorId = sortedByAdvisor[0];
+
+  // Choose examiner: min examiner count among others
+  const sortedByExaminer = teacherIds.filter(id => id !== advisorId).sort((a, b) => {
+    if (counts[a].examiner !== counts[b].examiner) return counts[a].examiner - counts[b].examiner;
+    if (counts[a].advisor !== counts[b].advisor) return counts[a].advisor - counts[b].advisor;
+    return a.localeCompare(b);
+  });
+
+  const examinerId = sortedByExaminer[0];
+
+  return { advisorId, examinerId };
+};
+
+// Helper: find first free slot for given examiner and term
+const findAvailableSlotForExaminer = async ({ examinerId, term }) => {
+  const slots = await DefenseSlot.find({ examinerId, term });
+  for (const s of slots) {
+    for (const pd of s.proposedDates || []) {
+      for (const t of (pd.timeSlots || [])) {
+        const taken = (s.approvedSlots || []).some(as => {
+          if (!as.date || !pd.date) return false;
+          const sameDay = new Date(as.date).toISOString().slice(0, 10) === new Date(pd.date).toISOString().slice(0, 10);
+          return sameDay && as.time === t;
+        });
+        if (!taken) {
+          return { slotId: s._id, date: pd.date, time: t };
+        }
+      }
     }
   }
-
-  const selectedAdvisor = Object.keys(advisorAssignments).reduce((a, b) =>
-    advisorAssignments[a] < advisorAssignments[b] ? a : b
-  );
-
-  const selectedExaminer = Object.keys(examinerAssignments).reduce((a, b) =>
-    examinerAssignments[a] < examinerAssignments[b] ? a : b
-  );
-
-  return { advisorId: selectedAdvisor, examinerId: selectedExaminer };
+  return null;
 };
 
 export const setCapacity = async (req, res) => {
@@ -115,9 +137,82 @@ export const setCapacity = async (req, res) => {
 export const getManagerProjects = async (req, res) => {
   try {
     const managerId = req.user.id;
-    const projects = await Project.find({ managerId })
+    const projects = await Project.find({
+      managerId,
+      status: { $in: ['active', 'topic_approved', 'scheduled', 'defended', 'graded'] }
+    })
       .populate('studentId advisorId examinerId');
     res.json(projects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get capacities for manager (optionally filtered by term)
+export const getCapacity = async (req, res) => {
+  try {
+    const manager = await User.findById(req.user.id).lean();
+    if (!manager) return res.status(404).json({ error: 'Manager not found' });
+    const { term } = req.query;
+    const filter = { managerId: req.user.id, major: manager.major };
+    if (term) filter.term = term;
+    const caps = await Capacity.find(filter).sort({ createdAt: -1 });
+    res.json(caps);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// List pending enrollments for manager's major (optionally by term)
+export const listPendingEnrollments = async (req, res) => {
+  try {
+    const term = req.query.term;
+    const manager = await User.findById(req.user.id).lean();
+    if (!manager) return res.status(404).json({ error: 'Manager not found' });
+
+    const students = await User.find({ role: 'student', major: manager.major }).select('_id').lean();
+    const studentIds = students.map(s => s._id);
+
+    const query = { status: 'pending', studentId: { $in: studentIds } };
+    if (term) query.term = term;
+
+    const projects = await Project.find(query).populate('studentId');
+    res.json(projects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Approve a student's enrollment: assign advisor/examiner and activate project
+export const approveEnrollment = async (req, res) => {
+  try {
+    const { projectId } = req.body;
+    const manager = await User.findById(req.user.id).lean();
+    if (!manager) return res.status(404).json({ error: 'Manager not found' });
+
+    const project = await Project.findById(projectId).populate('studentId');
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (project.status !== 'pending') return res.status(400).json({ error: 'Project is not pending' });
+
+    if (!project.studentId || project.studentId.major !== manager.major) {
+      return res.status(403).json({ error: 'Student major does not match manager major' });
+    }
+
+    const { advisorId, examinerId } = await assignBalancedTeachers({ major: manager.major, term: project.term });
+
+    project.managerId = req.user.id;
+    project.advisorId = advisorId;
+    project.examinerId = examinerId;
+    project.status = 'active';
+    await project.save();
+
+    // نه‌ خودکار زمان دفاع را برنامه‌ریزی نکن
+    // دانشجو ابتدا باید موضوعات خود را ارسال کند
+    // سپس مدیر موضوعات را تایید می‌کند
+    // سپس زمان دفاع برنامه‌ریزی می‌شود
+
+    const populated = await Project.findById(project._id).populate('studentId advisorId examinerId');
+    res.json({ project: populated, defenseScheduled: false });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -221,6 +316,121 @@ export const submitGrade = async (req, res) => {
       { new: true }
     );
     res.json(project);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const scheduleUnscheduledProjects = async (req, res) => {
+  try {
+    const managerId = req.user.id;
+
+    // پروژه‌های این مدیر که بدون تاریخ دفاع و دارای داور هستند
+    const projects = await Project.find({
+      managerId,
+      defenseDate: null,
+      examinerId: { $ne: null },
+      status: { $in: ['active', 'topic_approved'] }
+    }).populate('examinerId studentId');
+
+    if (!projects.length) {
+      return res.json({ message: 'تمامی پروژه‌ها زمان‌بندی شده‌اند', scheduled: 0 });
+    }
+
+    let scheduled = 0;
+    let noSlots = [];
+    const scheduled_list = [];
+
+    for (const project of projects) {
+      const term = project.term;
+      let chosen = null;
+      let usedExaminerId = project.examinerId._id;
+
+      // ابتدا اسلات‌های داور تعیین‌شده را جستجو کن
+      let slots = await DefenseSlot.find({ examinerId: project.examinerId._id, term });
+
+      // جستجو برای اسلات خالی در داور تعیین‌شده
+      for (const s of slots) {
+        for (const pd of s.proposedDates || []) {
+          for (const t of (pd.timeSlots || [])) {
+            const taken = (s.approvedSlots || []).some(as => {
+              if (!as.date || !pd.date) return false;
+              const sameDay = new Date(as.date).toISOString().slice(0, 10) === new Date(pd.date).toISOString().slice(0, 10);
+              return sameDay && as.time === t;
+            });
+            if (!taken) {
+              chosen = { slotId: s._id, date: pd.date, time: t };
+              break;
+            }
+          }
+          if (chosen) break;
+        }
+        if (chosen) break;
+      }
+
+      // اگر داور تعیین‌شده اسلات ندارد، از هر داوری با اسلات خالی استفاده کن
+      if (!chosen) {
+        const allSlots = await DefenseSlot.find({ term }).populate('examinerId');
+        for (const s of allSlots) {
+          for (const pd of s.proposedDates || []) {
+            for (const t of (pd.timeSlots || [])) {
+              const taken = (s.approvedSlots || []).some(as => {
+                if (!as.date || !pd.date) return false;
+                const sameDay = new Date(as.date).toISOString().slice(0, 10) === new Date(pd.date).toISOString().slice(0, 10);
+                return sameDay && as.time === t;
+              });
+              if (!taken) {
+                chosen = { slotId: s._id, date: pd.date, time: t };
+                usedExaminerId = s.examinerId;
+                break;
+              }
+            }
+            if (chosen) break;
+          }
+          if (chosen) break;
+        }
+      }
+
+      if (chosen) {
+        project.defenseDate = chosen.date;
+        project.defenseTime = chosen.time;
+        project.examinerId = usedExaminerId;
+        project.status = 'scheduled';
+        await project.save();
+
+        await DefenseSlot.findByIdAndUpdate(chosen.slotId, {
+          $push: {
+            approvedSlots: {
+              date: chosen.date,
+              time: chosen.time,
+              studentId: project.studentId
+            }
+          }
+        });
+
+        scheduled++;
+        scheduled_list.push({
+          student: `${project.studentId.firstName} ${project.studentId.lastName}`,
+          date: new Date(chosen.date).toLocaleDateString('fa-IR'),
+          time: chosen.time,
+          examiner: usedExaminerId.firstName
+        });
+      } else {
+        noSlots.push(project.studentId.firstName + ' ' + project.studentId.lastName);
+      }
+    }
+
+    const message = scheduled > 0 
+      ? `${scheduled} دانشجو زمان‌بندی شد${noSlots.length > 0 ? ` (${noSlots.length} پروژه اسلات ندارد)` : '.'}`
+      : `اسلات دفاعی برای هیچ پروژه‌ای در دسترس نیست`;
+
+    res.json({
+      message,
+      scheduled,
+      total: projects.length,
+      noSlots,
+      scheduled_list
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
