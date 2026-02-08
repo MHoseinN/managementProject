@@ -1,6 +1,20 @@
 import DefenseSlot from '../models/DefenseSlot.js';
 import Project from '../models/Project.js';
 import DefenseSlotModel from '../models/DefenseSlot.js';
+import Capacity from '../models/Capacity.js';
+
+const getRequiredSlotsForTerm = async ({ term, major }) => {
+  if (!term || !major) return 0;
+  const capacity = await Capacity.findOne({ term, major }).lean();
+  if (!capacity || !Array.isArray(capacity.advisorLimits)) return 0;
+  return capacity.advisorLimits.reduce((max, l) => Math.max(max, Number(l.limit || 0)), 0);
+};
+
+const countTotalSlots = (slots) => {
+  return (slots || []).reduce((sum, s) => {
+    return sum + (s.proposedDates || []).reduce((inner, pd) => inner + (pd.timeSlots || []).length, 0);
+  }, 0);
+};
 
 export const submitDefenseSlots = async (req, res) => {
   try {
@@ -20,6 +34,21 @@ export const submitDefenseSlots = async (req, res) => {
       return res.status(400).json({ error: 'تاریخ یا بازه زمانی معتبر ارسال نشده است' });
     }
 
+    // بررسی تعداد اسلات برای تایید
+    const requiredSlots = await getRequiredSlotsForTerm({ term, major: req.user.major });
+    const allSlots = await DefenseSlot.find({ term });
+    const totalNewSlots = normalized.reduce((sum, pd) => sum + (pd.timeSlots || []).length, 0);
+    const currentSlots = countTotalSlots(allSlots.filter(s => String(s.examinerId) !== String(examinerId)));
+    const totalAfterSubmit = currentSlots + totalNewSlots;
+
+    if (totalAfterSubmit < requiredSlots) {
+      return res.status(400).json({
+        error: `تعداد اسلات کافی نیست. حداقل ${requiredSlots} اسلات لازم است. در حال حاضر ${totalAfterSubmit} اسلات خواهید داشت.`,
+        requiredSlots,
+        currentSlots: totalAfterSubmit
+      });
+    }
+
     let slot = await DefenseSlot.findOne({ examinerId, term });
     if (!slot) {
       slot = new DefenseSlot({ examinerId, term, proposedDates: normalized });
@@ -32,7 +61,11 @@ export const submitDefenseSlots = async (req, res) => {
     // پس از ذخیره اسلات، پروژه‌های همین داور/ترم که تاریخ ندارند را زمان‌بندی کن
     await autoScheduleForExaminer({ examinerId, term });
 
-    res.json(slot);
+    const allSlots = await DefenseSlot.find({ term });
+    const requiredSlots = await getRequiredSlotsForTerm({ term, major: req.user.major });
+    const totalSlots = countTotalSlots(allSlots);
+
+    res.json({ slot, requiredSlots, totalSlots });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -63,7 +96,7 @@ const autoScheduleForExaminer = async ({ examinerId, term }) => {
     examinerId,
     term,
     defenseDate: null,
-    status: { $in: ['active', 'topic_approved'] }
+    status: { $in: ['topic_approved'] }
   }).sort({ createdAt: 1 });
 
   for (const project of projects) {
@@ -79,7 +112,7 @@ const autoScheduleForExaminer = async ({ examinerId, term }) => {
         approvedSlots: {
           date: chosen.date,
           time: chosen.time,
-          studentId: project.studentId
+          studentId: project.studentId?._id || project.studentId
         }
       }
     });
@@ -104,6 +137,21 @@ export const getDefenseSlotsForTerm = async (req, res) => {
     }
     const slots = await DefenseSlot.find({ term }).populate('examinerId');
     res.json(slots);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const getSlotRequirements = async (req, res) => {
+  try {
+    const { term } = req.query;
+    if (!term) {
+      return res.status(400).json({ error: 'ترم مشخص نشده است' });
+    }
+    const requiredSlots = await getRequiredSlotsForTerm({ term, major: req.user.major });
+    const allSlots = await DefenseSlot.find({ term });
+    const totalSlots = countTotalSlots(allSlots);
+    res.json({ term, requiredSlots, totalSlots });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -115,10 +115,60 @@ const findAvailableSlotForExaminer = async ({ examinerId, term }) => {
   return null;
 };
 
+const scheduleProjectIfPossible = async ({ project }) => {
+  if (!project || project.defenseDate || project.status !== 'topic_approved') return project;
+  if (!project.examinerId) return project;
+
+  const chosen = await findAvailableSlotForExaminer({ examinerId: project.examinerId, term: project.term });
+  if (!chosen) return project;
+
+  project.defenseDate = chosen.date;
+  project.defenseTime = chosen.time;
+  project.status = 'scheduled';
+  await project.save();
+
+  await DefenseSlot.findByIdAndUpdate(chosen.slotId, {
+    $push: {
+      approvedSlots: {
+        date: chosen.date,
+        time: chosen.time,
+        studentId: project.studentId?._id || project.studentId
+      }
+    }
+  });
+
+  return project;
+};
+
 export const setCapacity = async (req, res) => {
   try {
-    const { term, capacity, major } = req.body;
+    const { term, capacity, major, advisorLimits } = req.body;
     const managerId = req.user.id;
+
+    if (!term || capacity === undefined || capacity === null) {
+      return res.status(400).json({ error: 'ترم و ظرفیت الزامی است' });
+    }
+
+    if (!Array.isArray(advisorLimits) || advisorLimits.length === 0) {
+      return res.status(400).json({ error: 'ظرفیت هر استاد را وارد کنید' });
+    }
+
+    const normalizedLimits = advisorLimits.map(l => ({
+      advisorId: l.advisorId,
+      limit: Number(l.limit || 0)
+    }));
+
+    const total = normalizedLimits.reduce((sum, l) => sum + l.limit, 0);
+    if (total !== Number(capacity)) {
+      return res.status(400).json({ error: 'مجموع ظرفیت اساتید باید برابر ظرفیت کل باشد' });
+    }
+
+    const advisors = await User.find({ role: 'teacher', major }).select('_id').lean();
+    const advisorSet = new Set(advisors.map(a => String(a._id)));
+    const invalidAdvisor = normalizedLimits.find(l => !advisorSet.has(String(l.advisorId)));
+    if (invalidAdvisor) {
+      return res.status(400).json({ error: 'استاد نامعتبر در لیست ظرفیت‌ها وجود دارد' });
+    }
 
     let cap = await Capacity.findOne({ managerId, term, major });
     if (!cap) {
@@ -126,9 +176,47 @@ export const setCapacity = async (req, res) => {
     } else {
       cap.capacity = capacity;
     }
+
+    const assignedByAdvisor = (cap.advisorLimits || []).reduce((acc, item) => {
+      acc[String(item.advisorId)] = item.assigned || 0;
+      return acc;
+    }, {});
+
+    const nextAdvisorLimits = normalizedLimits.map(l => ({
+      advisorId: l.advisorId,
+      limit: l.limit,
+      assigned: assignedByAdvisor[String(l.advisorId)] || 0
+    }));
+
+    const overAssigned = nextAdvisorLimits.find(l => l.assigned > l.limit);
+    if (overAssigned) {
+      return res.status(400).json({ error: 'ظرفیت برخی اساتید کمتر از تعداد اخذ شده است' });
+    }
+
+    cap.advisorLimits = nextAdvisorLimits;
     
     await cap.save();
     res.json(cap);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const listMajorTeachers = async (req, res) => {
+  try {
+    let major = req.user.major;
+    if (!major) {
+      const manager = await User.findById(req.user.id).lean();
+      if (!manager) return res.status(404).json({ error: 'Manager not found' });
+      major = manager.major;
+    }
+
+    const teachers = await User.find({ role: 'teacher', major })
+      .select('firstName lastName')
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+
+    res.json(teachers);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -142,6 +230,11 @@ export const getManagerProjects = async (req, res) => {
       status: { $in: ['active', 'topic_approved', 'scheduled', 'defended', 'graded'] }
     })
       .populate('studentId advisorId examinerId');
+    for (const project of projects) {
+      if (project.status === 'topic_approved' && !project.defenseDate) {
+        await scheduleProjectIfPossible({ project });
+      }
+    }
     res.json(projects);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -330,7 +423,7 @@ export const scheduleUnscheduledProjects = async (req, res) => {
       managerId,
       defenseDate: null,
       examinerId: { $ne: null },
-      status: { $in: ['active', 'topic_approved'] }
+      status: { $in: ['topic_approved'] }
     }).populate('examinerId studentId');
 
     if (!projects.length) {

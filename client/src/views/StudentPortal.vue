@@ -11,7 +11,7 @@
         <div v-if="project && !isTopicApproved" class="card">
           <h2 class="text-xl font-bold mb-4 text-light-green">وضعیت پروژه</h2>
           <div class="space-y-2">
-            <p><span class="text-orange">موضوع تایید شده:</span> {{ approvedTopicTitle || 'منتظر تایید مدیر گروه ' }}
+            <p><span class="text-orange">موضوع تایید شده:</span> {{ approvedTopicTitle || 'منتظر تایید استاد راهنما' }}
             </p>
             <p><span class="text-orange">وضعیت:</span> {{ statusLabel }}</p>
             <p><span class="text-orange">استاد راهنما:</span> {{ project.advisorId?.lastName || '-' }}</p>
@@ -27,7 +27,7 @@
         <!-- Enrollment (when no project yet) -->
         <div v-if="!project" class="card">
           <h2 class="text-xl font-bold mb-4 text-light-green">اخذ پروژه</h2>
-          <div class="grid md:grid-cols-3 gap-3 mb-3">
+          <div class="grid md:grid-cols-4 gap-3 mb-3">
             <div>
               <label class="block text-sm mb-1">سال</label>
               <input v-model="year" type="number" min="1390" max="1500" placeholder="مثلاً 1404"
@@ -40,11 +40,26 @@
                 <option value="2">بهمن</option>
               </select>
             </div>
+            <div>
+              <label class="block text-sm mb-1">استاد راهنما</label>
+              <select v-model="selectedAdvisorId" class="w-full bg-card-bg border border-border-color px-3 py-2 rounded">
+                <option value="">انتخاب کنید</option>
+                <option
+                  v-for="advisor in advisorOptions"
+                  :key="advisor.advisorId"
+                  :value="advisor.advisorId"
+                  :disabled="advisor.remaining <= 0"
+                >
+                  {{ advisor.firstName }} {{ advisor.lastName }} (باقی‌مانده: {{ advisor.remaining }})
+                </option>
+              </select>
+            </div>
             <div class="flex items-end">
               <button @click="enrollProject" class="btn-primary w-full">اخذ پروژه</button>
             </div>
           </div>
           <p class="text-sm text-gray-500">ترم انتخابی: {{ selectedTermLabel }}</p>
+          <p v-if="advisorOptions.length === 0" class="text-xs text-text-secondary mt-2">ظرفیت اساتید برای این ترم ثبت نشده است.</p>
         </div>
 
         <!-- Proposed Topics -->
@@ -267,7 +282,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api.js';
 import { toJalali } from '../utils/dateUtils.js';
@@ -286,6 +301,8 @@ const topicsForm = ref([
 ]);
 const year = ref(null);
 const termHalf = ref('1');
+const advisorOptions = ref([]);
+const selectedAdvisorId = ref('');
 const reportTitle = ref('');
 const reportDescription = ref('');
 const reportFile = ref(null);
@@ -301,6 +318,11 @@ onMounted(() => {
   loadProject();
   loadMessages();
   year.value = getJalaliYear();
+  loadAdvisorOptions();
+});
+
+watch([year, termHalf], () => {
+  loadAdvisorOptions();
 });
 
 const canSubmitTopics = computed(() => {
@@ -327,8 +349,8 @@ const approvedTopicTitle = computed(() => {
 const statusLabel = computed(() => {
   const map = {
     pending: 'در انتظار تایید',
-    active: 'فعال',
-    topic_submitted: 'موضوع ارسال شده',
+    active: 'آماده ارسال موضوعات',
+    topic_submitted: 'موضوع ارسال شده - منتظر تایید استاد راهنما',
     topic_approved: 'موضوع تایید شده',
     scheduled: 'زمان بندی دفاع',
     defended: 'دفاع شده',
@@ -406,10 +428,29 @@ function termLabel(term) {
 async function enrollProject() {
   try {
     const term = termString(year.value, termHalf.value);
-    const res = await api.post('/projects/enroll', { term });
+    if (!selectedAdvisorId.value) {
+      alert('استاد راهنما را انتخاب کنید');
+      return;
+    }
+    const res = await api.post('/projects/enroll', { term, advisorId: selectedAdvisorId.value });
     project.value = res.data;
   } catch (err) {
     alert(err.response?.data?.error || 'خطا');
+  }
+}
+async function loadAdvisorOptions() {
+  try {
+    const term = termString(year.value, termHalf.value);
+    if (!term) return;
+    const res = await api.get(`/projects/advisor-options?term=${encodeURIComponent(term)}`);
+    advisorOptions.value = res.data?.advisors || [];
+    const stillValid = advisorOptions.value.find(a => String(a.advisorId) === String(selectedAdvisorId.value) && a.remaining > 0);
+    if (!stillValid) {
+      selectedAdvisorId.value = '';
+    }
+  } catch (err) {
+    advisorOptions.value = [];
+    console.error(err);
   }
 }
 async function submitTopics() {

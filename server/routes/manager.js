@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.post('/capacity', authMiddleware, roleMiddleware('manager'), managerCtrl.setCapacity);
 router.get('/capacity', authMiddleware, roleMiddleware('manager'), managerCtrl.getCapacity);
+router.get('/teachers', authMiddleware, roleMiddleware('manager'), managerCtrl.listMajorTeachers);
 router.get('/projects', authMiddleware, roleMiddleware('manager'), managerCtrl.getManagerProjects);
 router.get('/pending-enrollments', authMiddleware, roleMiddleware('manager'), managerCtrl.listPendingEnrollments);
 router.post('/approve-enrollment', authMiddleware, roleMiddleware('manager'), managerCtrl.approveEnrollment);

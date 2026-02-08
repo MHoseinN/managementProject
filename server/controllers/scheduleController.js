@@ -21,7 +21,7 @@ export const scheduleDefenses = async (req, res) => {
     // Find all approved/فعال projects without defense date
     const projects = await Project.find({
       term,
-      status: { $in: ['topic_approved', 'active'] },
+      status: { $in: ['topic_approved'] },
       defenseDate: null
     }).populate('advisorId examinerId');
 

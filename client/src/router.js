@@ -4,6 +4,9 @@ import Register from './views/Register.vue';
 import Login from './views/Login.vue';
 import StudentPortal from './views/StudentPortal.vue';
 import TeacherPortal from './views/TeacherPortal.vue';
+import TeacherAdvisor from './views/TeacherAdvisor.vue';
+import TeacherExaminer from './views/TeacherExaminer.vue';
+import TeacherDefenseSchedule from './views/TeacherDefenseSchedule.vue';
 import ManagerPortal from './views/ManagerPortal.vue';
 import AdminPortal from './views/AdminPortal.vue';
 import StudentDetailView from './views/StudentDetailView.vue';
@@ -20,6 +23,21 @@ const routes = [
   { 
     path: '/teacher', 
     component: TeacherPortal,
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  { 
+    path: '/teacher/advisor', 
+    component: TeacherAdvisor,
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  { 
+    path: '/teacher/examiner', 
+    component: TeacherExaminer,
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  { 
+    path: '/teacher/defense', 
+    component: TeacherDefenseSchedule,
     meta: { requiresAuth: true, role: 'teacher' }
   },
   { 

@@ -6,6 +6,13 @@ const capacitySchema = new mongoose.Schema({
   term: { type: String, required: true },
   capacity: { type: Number, required: true },
   enrolled: { type: Number, default: 0 },
+  advisorLimits: [
+    {
+      advisorId: mongoose.Schema.Types.ObjectId,
+      limit: Number,
+      assigned: { type: Number, default: 0 }
+    }
+  ],
   examinerLimits: [
     {
       examinerId: mongoose.Schema.Types.ObjectId,

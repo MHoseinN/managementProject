@@ -27,9 +27,29 @@
               <input v-model.number="capacity" type="number" min="0" placeholder="تعداد" class="w-full bg-card-bg border border-border-color px-3 py-2 rounded">
             </div>
             <div class="flex items-end">
-              <button @click="setCapacity" class="btn-primary w-full">ثبت ظرفیت</button>
+              <button @click="setCapacity" class="btn-primary w-full" :disabled="!canSubmitCapacity">ثبت ظرفیت</button>
             </div>
           </div>
+          <div class="mt-4">
+            <h3 class="text-sm font-bold text-text-secondary mb-2">ظرفیت هر استاد</h3>
+            <div v-if="advisorLimits.length" class="space-y-2">
+              <div v-for="advisor in advisorLimits" :key="advisor.advisorId" class="grid md:grid-cols-4 gap-3 items-center bg-card-bg p-3 rounded border border-border-color">
+                <div class="md:col-span-2">
+                  <p class="font-bold">{{ advisor.firstName }} {{ advisor.lastName }}</p>
+                  <p class="text-xs text-text-secondary">باقی‌مانده: {{ Math.max(0, (advisor.limit || 0) - (advisor.assigned || 0)) }}</p>
+                </div>
+                <div>
+                  <label class="block text-xs mb-1">ظرفیت راهنمایی</label>
+                  <input v-model.number="advisor.limit" type="number" min="0" class="w-full bg-white border border-border-color px-3 py-2 rounded">
+                </div>
+                <div class="text-xs text-text-secondary">
+                  اخذ شده: {{ advisor.assigned }}
+                </div>
+              </div>
+            </div>
+            <div v-else class="text-xs text-text-secondary">هیچ استادی برای این رشته ثبت نشده است.</div>
+          </div>
+          <p class="mt-3 text-xs" :class="capacityNoteClass">مجموع ظرفیت اساتید: {{ totalAdvisorLimit }} / ظرفیت کل: {{ capacity || 0 }}</p>
           <div class="mt-3 text-sm text-gray-600" v-if="currentCapacity">
             <span class="text-light-green font-bold">وضعیت ترم {{ termLabel(currentCapacity.term) }}:</span>
             ظرفیت {{ currentCapacity.capacity }} — اخذ شده {{ currentCapacity.enrolled }}
@@ -94,45 +114,6 @@
           </div>
         </div>
 
-        <!-- Pending Enrollments for Approval -->
-        <div class="card">
-          <h2 class="text-xl font-bold mb-4 text-light-green">درخواست‌های اخذ پروژه (در انتظار تایید)</h2>
-          <div class="flex gap-3 mb-3">
-            <select v-model="filterTermHalf" class="bg-card-bg border border-border-color px-3 py-2 rounded">
-              <option value="">همه ترم‌ها</option>
-              <option value="1">مهر</option>
-              <option value="2">بهمن</option>
-            </select>
-            <input v-model="filterYear" type="number" placeholder="سال" class="bg-card-bg border border-border-color px-3 py-2 rounded w-32">
-            <button class="btn-secondary" @click="loadPending">بارگیری</button>
-          </div>
-          <div class="overflow-x-auto" v-if="pending.length">
-            <table class="w-full text-sm">
-              <thead class="bg-dark-green border-b-2 border-dark-green">
-                <tr>
-                  <th class="px-4 py-3 text-right font-bold text-white">نام و نام خانوادگی</th>
-                  <th class="px-4 py-3 text-right font-bold text-white">کد ملی</th>
-                  <th class="px-4 py-3 text-right font-bold text-white">ترم</th>
-                  <th class="px-4 py-3 text-center font-bold text-white">اقدام</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in pending" :key="p._id" class="border-b border-dark-green/20 hover:bg-dark-green/10 transition">
-                  <td class="px-4 py-3 text-right">{{ p.studentId?.firstName }} {{ p.studentId?.lastName }}</td>
-                  <td class="px-4 py-3 text-right text-gray-600">{{ p.studentId?.nationalId }}</td>
-                  <td class="px-4 py-3 text-right">{{ termLabel(p.term) }}</td>
-                  <td class="px-4 py-3 text-center">
-                    <button class="btn-primary text-sm px-4 py-1" :disabled="loadingApproveId===p._id" @click="approve(p._id)">
-                      {{ loadingApproveId===p._id ? 'در حال تایید...' : 'تایید' }}
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div v-else class="text-gray-500">درخواستی برای تایید وجود ندارد.</div>
-        </div>
-
         <!-- Students List -->
         <div class="card">
           <div class="flex items-center justify-between mb-4">
@@ -172,7 +153,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api.js';
 import { toJalali } from '../utils/dateUtils.js';
@@ -180,16 +161,14 @@ import { toJalali } from '../utils/dateUtils.js';
 const year = ref(null);
 const termHalf = ref('1');
 const capacity = ref('');
-const filterYear = ref('');
-const filterTermHalf = ref('');
 const projects = ref([]);
-const pending = ref([]);
-const loadingApproveId = ref(null);
 const currentCapacity = ref(null);
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'));
 const defenseSlots = ref([]);
 const slotFilterYear = ref(null);
 const slotFilterTermHalf = ref('1');
+const teachers = ref([]);
+const advisorLimits = ref([]);
 const router = useRouter();
 const goBack = () => {
   if (window.history.length > 1) {
@@ -243,6 +222,19 @@ const termLabel = (term) => {
   return `${h === '2' ? 'بهمن' : 'مهر'} ${y}`;
 };
 
+const totalAdvisorLimit = computed(() => {
+  return advisorLimits.value.reduce((sum, l) => sum + Number(l.limit || 0), 0);
+});
+
+const canSubmitCapacity = computed(() => {
+  const hasCapacity = capacity.value !== '' && capacity.value !== null;
+  return hasCapacity && Number(capacity.value) === totalAdvisorLimit.value;
+});
+
+const capacityNoteClass = computed(() => {
+  return canSubmitCapacity.value ? 'text-success' : 'text-error';
+});
+
 const formatDate = (date) => {
   if (!date) return '-';
   return toJalali(date);
@@ -262,7 +254,11 @@ const setCapacity = async () => {
     await api.post('/manager/capacity', {
       term,
       capacity: capacity.value,
-      major: user.value.major
+      major: user.value.major,
+      advisorLimits: advisorLimits.value.map(a => ({
+        advisorId: a.advisorId,
+        limit: a.limit
+      }))
     });
     alert('ظرفیت ثبت شد');
     await loadCapacity();
@@ -271,38 +267,46 @@ const setCapacity = async () => {
   }
 };
 
+const loadTeachers = async () => {
+  try {
+    const res = await api.get('/manager/teachers');
+    teachers.value = res.data;
+    buildAdvisorLimits();
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const buildAdvisorLimits = () => {
+  const existing = currentCapacity.value?.advisorLimits || [];
+  const existingMap = existing.reduce((acc, item) => {
+    acc[String(item.advisorId)] = item;
+    return acc;
+  }, {});
+
+  advisorLimits.value = teachers.value.map(t => {
+    const match = existingMap[String(t._id)] || {};
+    const limit = Number(match.limit || 0);
+    const assigned = Number(match.assigned || 0);
+    return {
+      advisorId: t._id,
+      firstName: t.firstName,
+      lastName: t.lastName,
+      limit,
+      assigned
+    };
+  });
+};
+
 const loadCapacity = async () => {
   try {
     const term = termString(year.value, termHalf.value);
     const res = await api.get(`/manager/capacity?term=${encodeURIComponent(term)}`);
     currentCapacity.value = res.data && res.data.length ? res.data[0] : null;
+    capacity.value = currentCapacity.value?.capacity ?? '';
+    buildAdvisorLimits();
   } catch (err) {
     console.error(err);
-  }
-};
-
-const loadPending = async () => {
-  try {
-    let termParam = '';
-    if (filterYear.value && filterTermHalf.value) {
-      termParam = `?term=${termString(filterYear.value, filterTermHalf.value)}`;
-    }
-    const res = await api.get(`/manager/pending-enrollments${termParam}`);
-    pending.value = res.data;
-  } catch (err) {
-    console.error(err);
-  }
-};
-
-const approve = async (projectId) => {
-  try {
-    loadingApproveId.value = projectId;
-    await api.post('/manager/approve-enrollment', { projectId });
-    await Promise.all([loadPending(), loadProjects()]);
-  } catch (err) {
-    alert(err.response?.data?.error || 'خطا در تایید');
-  } finally {
-    loadingApproveId.value = null;
   }
 };
 
@@ -328,9 +332,9 @@ const scheduleAuto = async () => {
 onMounted(() => {
   year.value = getJalaliYear();
   slotFilterYear.value = year.value;
-  filterYear.value = year.value;
+  capacity.value = '';
   loadProjects();
-  loadPending();
+  loadTeachers();
   loadDefenseSlots();
 });
 </script>
