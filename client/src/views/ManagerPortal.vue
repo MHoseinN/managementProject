@@ -1,7 +1,10 @@
 <template>
   <div class="min-h-screen bg-dark-bg px-4 py-8">
     <div class="max-w-6xl mx-auto">
-      <h1 class="text-3xl font-bold mb-8 text-primary">پورتال مدیر گروه</h1>
+      <div class="flex items-center justify-between mb-8">
+        <h1 class="text-3xl font-bold text-primary">پورتال مدیر گروه</h1>
+        <button type="button" @click="goBack" class="btn-secondary">بازگشت</button>
+      </div>
 
       <div class="grid gap-6">
         <!-- Set Capacity -->
@@ -170,6 +173,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api.js';
 import { toJalali } from '../utils/dateUtils.js';
 
@@ -186,6 +190,14 @@ const user = ref(JSON.parse(localStorage.getItem('user') || '{}'));
 const defenseSlots = ref([]);
 const slotFilterYear = ref(null);
 const slotFilterTermHalf = ref('1');
+const router = useRouter();
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push('/');
+  }
+};
 
 const countTotalSlots = (slot) => {
   return (slot.proposedDates || []).reduce((sum, pd) => sum + (pd.timeSlots || []).length, 0);

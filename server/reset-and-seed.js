@@ -3,26 +3,26 @@ import dotenv from 'dotenv';
 import User from './models/User.js';
 import Capacity from './models/Capacity.js';
 import Project from './models/Project.js';
+import DefenseSlot from './models/DefenseSlot.js';
+import Message from './models/Message.js';
+import Report from './models/Report.js';
 import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
-const seedDatabase = async () => {
+const resetAndSeed = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/managementProject');
     console.log('✓ Connected to MongoDB');
 
-    // Check if data already exists
-    const existingUsers = await User.countDocuments({});
-    if (existingUsers > 0) {
-      console.log('\n⚠️  Database already has data. Skipping seed operation.');
-      console.log(`   Found ${existingUsers} users in database.`);
-      console.log('\n💡 To reset the database, use: node scripts/resetDatabase.js\n');
-      await mongoose.connection.close();
-      return;
-    }
-
-    console.log('✓ Database is empty, starting seed...\n');
+    // Clear all data
+    await User.deleteMany({});
+    await Capacity.deleteMany({});
+    await Project.deleteMany({});
+    await DefenseSlot.deleteMany({});
+    await Message.deleteMany({});
+    await Report.deleteMany({});
+    console.log('✓ Database cleared');
 
     // Create Admin
     const adminPassword = await bcrypt.hash('12345', 10);
@@ -128,13 +128,15 @@ const seedDatabase = async () => {
     });
     console.log('✓ Project created:', project._id);
 
-    console.log('\n✓✓✓ Database seeded successfully! ✓✓✓\n');
-
+    console.log('\n✓✓✓ Database reset and seeded successfully! ✓✓✓\n');
+    
     await mongoose.connection.close();
+    process.exit(0);
   } catch (err) {
     console.error('❌ Error:', err.message);
+    console.error(err.stack);
     process.exit(1);
   }
 };
 
-seedDatabase();
+resetAndSeed();

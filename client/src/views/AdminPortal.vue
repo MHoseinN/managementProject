@@ -1,7 +1,10 @@
 <template>
   <div class="min-h-screen bg-dark-bg px-4 py-8">
     <div class="max-w-6xl mx-auto">
-      <h1 class="text-3xl font-bold mb-8 text-orange">پورتال ادمین</h1>
+      <div class="flex items-center justify-between mb-8">
+        <h1 class="text-3xl font-bold text-orange">پورتال ادمین</h1>
+        <button type="button" @click="goBack" class="btn-secondary">بازگشت</button>
+      </div>
 
       <div class="card mb-6">
         <h2 class="text-xl font-bold mb-4 text-primary">درخواست‌های ثبت‌نام (در انتظار تایید)</h2>
@@ -81,11 +84,20 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api.js';
 
 const pendingUsers = ref([]);
 const approvedGrouped = ref({ student: {}, teacher: {}, manager: {} });
 const loading = ref(false);
+const router = useRouter();
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push('/');
+  }
+};
 
 const roleLabel = (role) => {
   const map = { student: 'دانشجو', teacher: 'استاد', manager: 'مدیر گروه', admin: 'ادمین' };

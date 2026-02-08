@@ -45,16 +45,16 @@ export const login = async (req, res) => {
     console.log('[LOGIN] Request received');
     console.log('[LOGIN] req.body:', req.body);
     
-    const { nationalId, identityNumber, role } = req.body;
-    console.log('[LOGIN] Destructured:', { nationalId, identityNumber, role });
+    const { nationalId, identityNumber } = req.body;
+    console.log('[LOGIN] Destructured:', { nationalId, identityNumber });
     
-    if (!nationalId || !identityNumber || !role) {
-      console.warn('[LOGIN] Missing required fields:', { nationalId, identityNumber, role });
-      return res.status(400).json({ error: 'nationalId, identityNumber, and role are required' });
+    if (!nationalId || !identityNumber) {
+      console.warn('[LOGIN] Missing required fields:', { nationalId, identityNumber });
+      return res.status(400).json({ error: 'nationalId and identityNumber are required' });
     }
     
-    console.log('[LOGIN] Searching user:', { nationalId, role });
-    const user = await User.findOne({ nationalId, role });
+    console.log('[LOGIN] Searching user:', { nationalId });
+    const user = await User.findOne({ nationalId });
     console.log('[LOGIN] User found:', user ? user._id : 'none');
     
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });

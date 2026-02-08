@@ -1,7 +1,10 @@
 <template>
   <div class="min-h-screen bg-dark-bg px-4 py-8">
     <div class="max-w-6xl mx-auto">
-      <h1 class="text-3xl font-bold mb-8 text-primary">پورتال استاد</h1>
+      <div class="flex items-center justify-between mb-8">
+        <h1 class="text-3xl font-bold text-primary">پورتال استاد</h1>
+        <button type="button" @click="goBack" class="btn-secondary">بازگشت</button>
+      </div>
 
       <div class="grid grid-cols-2 gap-6">
         <!-- Advisor Section -->
@@ -114,6 +117,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api.js';
 import { inputToJalali, toJalali } from '../utils/dateUtils.js';
 
@@ -126,6 +130,14 @@ const defenseSlots = ref([
   { date: '', startTime: '', endTime: '' }
 ]);
 const gradeMap = ref({});
+const router = useRouter();
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push('/');
+  }
+};
 
 const minDate = computed(() => {
   const today = new Date();

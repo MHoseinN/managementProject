@@ -1,40 +1,33 @@
 <template>
   <div class="min-h-screen bg-dark-bg px-4 py-8">
+    <button type="button" @click="goBack" class="btn-secondary">بازگشت</button>
     <div class="max-w-md mx-auto">
       <div class="card">
-        <h2 class="text-2xl font-bold mb-6 text-orange">ورود</h2>
-        
         <form @submit.prevent="login" class="space-y-4">
-          <div>
-            <label class="block text-sm mb-1">نقش</label>
-            <select v-model="form.role" class="w-full bg-card-bg border border-border-color px-3 py-2 rounded">
-              <option value="student">دانشجو</option>
-              <option value="teacher">استاد</option>
-              <option value="manager">مدیر گروه</option>
-              <option value="admin">ادمین</option>
-            </select>
-          </div>
-
+          <h1 class="text-center font-bold">ورود</h1>
           <div>
             <label class="block text-sm mb-1">کد ملی (نام کاربری)</label>
-            <input v-model="form.nationalId" class="w-full bg-dark-bg border border-primary/30 px-3 py-2 rounded" placeholder="۰۳۷۲۱۹۹۹۸۴">
-            <small class="text-gray-400">برای تست: 0372199984 (دانشجو)</small>
+            <input v-model="form.nationalId" class="w-full bg-dark-bg border border-primary/30 px-3 py-2 rounded"
+              placeholder="0371">
           </div>
 
           <div>
-            <label class="block text-sm mb-1">شناسه</label>
-            <input v-model="form.identityNumber" type="password" class="w-full bg-dark-bg border border-primary/30 px-3 py-2 rounded" placeholder="شماره دانشجویی یا شناسه استاد">
-            <small class="text-text-secondary">برای تست: 99101241 (دانشجو)</small>
+            <label class="block text-sm mb-1">رمز عبور</label>
+            <input v-model="form.identityNumber" type="password"
+              class="w-full bg-dark-bg border border-primary/30 px-3 py-2 rounded"
+              placeholder=" ****** ">
           </div>
 
-          <button type="submit" class="w-full btn-primary py-2" :disabled="loading">{{ loading ? 'در حال ورود...' : 'ورود' }}</button>
+          <button type="submit" class="w-full btn-primary py-2" :disabled="loading">{{ loading ? 'در حال ورود...' :
+            'ورود' }}</button>
         </form>
 
         <div v-if="error" class="mt-4 p-3 bg-red-900/30 border border-red-500 rounded text-red-300">
           <strong>خطا:</strong> {{ error }}
           <br><small>اطلاعات ورود را بررسی کنید و دوباره تلاش کنید</small>
         </div>
-        <router-link to="/register" class="block text-center mt-4 text-orange hover:underline">ثبت نام ندارید؟</router-link>
+        <router-link to="/register" class="block text-center mt-4 text-orange hover:underline">ثبت نام
+          ندارید؟</router-link>
       </div>
     </div>
   </div>
@@ -46,9 +39,16 @@ import { useRouter } from 'vue-router';
 import api from '../api.js';
 
 const router = useRouter();
-const form = reactive({ role: 'student', nationalId: '', identityNumber: '' });
+const form = reactive({ nationalId: '', identityNumber: '' });
 const error = ref('');
 const loading = ref(false);
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push('/');
+  }
+};
 
 const login = async () => {
   error.value = '';

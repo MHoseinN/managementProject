@@ -1,7 +1,10 @@
 <template>
   <div class="min-h-screen bg-dark-bg px-4 py-8">
     <div class="max-w-4xl mx-auto">
-      <h1 class="text-3xl font-bold mb-8 text-orange">پورتال دانشجو</h1>
+      <div class="flex items-center justify-between mb-8">
+        <h1 class="text-3xl font-bold text-orange">پورتال دانشجو</h1>
+        <button type="button" @click="goBack" class="btn-secondary">بازگشت</button>
+      </div>
 
       <div class="grid gap-6">
         <!-- Project Status (hidden after approval) -->
@@ -265,11 +268,13 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api.js';
 import { toJalali } from '../utils/dateUtils.js';
 import MessageThread from '../components/MessageThread.vue';
 import ReportList from '../components/ReportList.vue';
 
+const router = useRouter();
 const project = ref(null);
 const reports = ref([]);
 const messages = ref([]);
@@ -284,6 +289,13 @@ const termHalf = ref('1');
 const reportTitle = ref('');
 const reportDescription = ref('');
 const reportFile = ref(null);
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push('/');
+  }
+};
 
 onMounted(() => {
   loadProject();
