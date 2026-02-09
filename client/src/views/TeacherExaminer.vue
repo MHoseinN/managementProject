@@ -15,7 +15,9 @@
                 <p class="font-bold text-lg">{{ project.studentId?.firstName }} {{ project.studentId?.lastName }}</p>
                 <p class="text-sm text-text-secondary mt-1">عنوان موضوع: {{ project.topic || 'منتظر انتخاب' }}</p>
                 <p class="text-xs text-text-secondary mt-1">وضعیت: {{ getStatusText(project.status) }}</p>
-                <p v-if="project.defenseDate" class="text-xs text-warning mt-2">📅 {{ toJalali(project.defenseDate) }} - {{ project.defenseTime }}</p>
+                <p v-if="project.defenseDate" class="text-xs text-warning mt-2">
+                  📅 {{ formatDefenseDate(project.defenseDate, project.defenseTime) }}
+                </p>
                 <p v-else class="text-xs text-gray-400 mt-2">⏳ در انتظار زمان بندی</p>
               </div>
               <div class="w-40">
@@ -38,7 +40,7 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api.js';
-import { toJalali } from '../utils/dateUtils.js';
+import { toJalali, formatDefenseDate, toJalaliWithWeekDay } from '../utils/dateUtils.js';
 
 const examinerProjects = ref([]);
 const gradeMap = ref({});

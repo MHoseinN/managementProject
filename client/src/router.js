@@ -10,6 +10,7 @@ import TeacherDefenseSchedule from './views/TeacherDefenseSchedule.vue';
 import ManagerPortal from './views/ManagerPortal.vue';
 import AdminPortal from './views/AdminPortal.vue';
 import StudentDetailView from './views/StudentDetailView.vue';
+import DateTest from './views/DateTest.vue';
 
 const routes = [
   { path: '/', component: Home },
@@ -54,6 +55,10 @@ const routes = [
     path: '/admin', 
     component: AdminPortal,
     meta: { requiresAuth: true, role: 'admin' }
+  },
+  { 
+    path: '/date-test', 
+    component: DateTest
   }
 ];
 

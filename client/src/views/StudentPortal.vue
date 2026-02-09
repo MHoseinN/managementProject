@@ -17,8 +17,10 @@
             <p><span class="text-orange">استاد راهنما:</span> {{ project.advisorId?.lastName || '-' }}</p>
             <p><span class="text-orange">استاد داور:</span> {{ project.examinerId?.lastName || '-' }}</p>
             <p><span class="text-orange">تاریخ و ساعت دفاع:</span>
-              {{ project.defenseDate ? toJalali(project.defenseDate) : '-' }}
-              <span class="mr-2">{{ project.defenseTime || '-' }}</span>
+              <span v-if="project.defenseDate" class="text-warning font-bold">
+                {{ formatDefenseDate(project.defenseDate, project.defenseTime) }}
+              </span>
+              <span v-else class="text-gray-400">مشخص نشده</span>
             </p>
             <p v-if="project.grade"><span class="text-orange">نمره نهایی:</span> {{ project.grade }}</p>
           </div>
@@ -153,10 +155,12 @@
 
               <div class="bg-warning-light rounded p-4 border-2 border-warning">
                 <p class="text-sm text-text-secondary mb-2">زمان دفاع:</p>
-                <p class="text-lg font-bold text-warning flex items-center gap-2">
-                  <span>{{ project.defenseDate ? toJalali(project.defenseDate) : '-' }}</span>
-                  <span class="mr-2">ساعت {{ project.defenseTime || '-' }}</span>
-                </p>
+                <div class="text-lg font-bold text-warning">
+                  <p v-if="project.defenseDate">
+                    {{ formatDefenseDate(project.defenseDate, project.defenseTime) }}
+                  </p>
+                  <p v-else class="text-gray-400">تاریخ دفاع هنوز مشخص نشده</p>
+                </div>
               </div>
 
               <div v-if="project.grade" class="bg-primary-lighter rounded p-4 border-2 border-primary">
@@ -178,7 +182,7 @@
                 <div class="mb-4 max-h-48 overflow-y-auto">
                   <ReportList
                     :reports="reports"
-                    :format-date="toJalali"
+                    :format-date="toJalaliWithWeekDay"
                     empty-text="هنوز گزارشی ثبت نشده است."
                     untitled-text="بدون عنوان"
                     no-description-text="بدون توضیح"
@@ -285,7 +289,12 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api.js';
-import { toJalali } from '../utils/dateUtils.js';
+import { 
+  toJalali, 
+  toJalaliWithWeekDay, 
+  formatDefenseDate,
+  toFullPersianDate 
+} from '../utils/dateUtils.js';
 import MessageThread from '../components/MessageThread.vue';
 import ReportList from '../components/ReportList.vue';
 

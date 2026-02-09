@@ -71,11 +71,13 @@
             </div>
             <div v-if="project.defenseDate || project.defenseTime" class="border-t border-primary-light/50 pt-3 mt-3">
               <div class="bg-warning-light p-4 rounded border-2 border-warning">
-                <p class="text-sm text-text-secondary mb-2">📅 تاریخ دفاع:</p>
-                <p class="text-lg font-bold text-warning">{{ project.defenseDate ? toJalali(project.defenseDate) : '-'
-                }}</p>
-                <p class="text-sm text-text-secondary mt-3 mb-2">⏰ ساعت دفاع:</p>
-                <p class="text-lg font-bold text-warning">{{ project.defenseTime || '-' }}</p>
+                <p class="text-sm text-text-secondary mb-2">📅 زمان دفاع:</p>
+                <div class="text-lg font-bold text-warning">
+                  <p v-if="project.defenseDate">
+                    {{ formatDefenseDate(project.defenseDate, project.defenseTime) }}
+                  </p>
+                  <p v-else class="text-gray-400">تاریخ دفاع هنوز مشخص نشده</p>
+                </div>
               </div>
             </div>
             <div v-if="project.grade" class="border-t border-primary-light/50 pt-3 mt-3">
@@ -208,7 +210,7 @@
           </h2>
           <ReportList
             :reports="reports"
-            :format-date="toJalali"
+            :format-date="toJalaliWithWeekDay"
             empty-text="گزارشی ثبت نشده است."
             untitled-text="بدون عنوان"
             no-description-text="بدون توضیح"
@@ -224,7 +226,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api.js';
-import { toJalali } from '../utils/dateUtils.js';
+import { toJalali, formatDefenseDate, toFullPersianDate } from '../utils/dateUtils.js';
 import ReportList from '../components/ReportList.vue';
 
 

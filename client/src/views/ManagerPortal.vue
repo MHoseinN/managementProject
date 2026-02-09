@@ -95,7 +95,7 @@
                 <p class="text-sm font-bold text-primary mb-2">روزهای ثبت‌شده:</p>
                 <div class="space-y-2">
                   <div v-for="(pd, dateIdx) in slot.proposedDates" :key="dateIdx" class="bg-card-bg p-3 rounded border border-border-color">
-                    <p class="font-bold text-light-green">{{ toJalali(new Date(pd.date)) }}</p>
+                    <p class="font-bold text-light-green">{{ toJalaliWithWeekDay(new Date(pd.date)) }}</p>
                     <div class="text-xs text-text-secondary mt-1 flex flex-wrap gap-1">
                       <span v-for="(time, timeIdx) in pd.timeSlots" :key="timeIdx" :class="[
                         'px-2 py-1 rounded',
@@ -156,7 +156,7 @@
 import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api.js';
-import { toJalali } from '../utils/dateUtils.js';
+import { toJalali, toJalaliWithWeekDay, formatDefenseDate } from '../utils/dateUtils.js';
 
 const year = ref(null);
 const termHalf = ref('1');
@@ -237,7 +237,7 @@ const capacityNoteClass = computed(() => {
 
 const formatDate = (date) => {
   if (!date) return '-';
-  return toJalali(date);
+  return toJalaliWithWeekDay(date);
 };
 
 const formatTime = (date) => {

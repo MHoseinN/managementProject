@@ -89,20 +89,44 @@
 
             <div class="grid md:grid-cols-3 gap-3">
               <div>
-                <label class="block text-sm mb-1">تاریخ</label>
-                <input type="date" v-model="slot.date"
-                  class="w-full bg-card-bg border border-border-color px-3 py-2 rounded" :min="minDate">
-                <p v-if="slot.date" class="text-xs text-text-secondary mt-1">{{ inputToJalali(slot.date) }}</p>
+                <label class="block text-sm font-bold mb-2 text-primary">تاریخ</label>
+                <PersianDatePicker v-model="slot.date" :min="minDate" />
+                <div v-if="slot.date" class="mt-2 p-3 rounded-lg" :class="{
+                  'bg-green-50 dark:bg-green-900/20 border-2 border-green-400': isWorkDay(slot.date),
+                  'bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-400': !isWorkDay(slot.date)
+                }">
+                  <div class="flex items-center gap-2">
+                    <span class="text-2xl">{{ isWorkDay(slot.date) ? '✅' : '⚠️' }}</span>
+                    <div>
+                      <p class="font-bold text-sm" :class="{
+                        'text-green-700 dark:text-green-400': isWorkDay(slot.date),
+                        'text-orange-700 dark:text-orange-400': !isWorkDay(slot.date)
+                      }">
+                        {{ isWorkDay(slot.date) ? 'روز کاری' : (isFriday(slot.date) ? 'جمعه - تعطیل' : 'روز غیرکاری') }}
+                      </p>
+                      <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        {{ inputToJalaliWithWeekDay(slot.date) }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div>
-                <label class="block text-sm mb-1">ساعت شروع</label>
+                <label class="block text-sm font-bold mb-2 text-primary">ساعت شروع</label>
                 <input type="time" v-model="slot.startTime"
-                  class="w-full bg-card-bg border border-border-color px-3 py-2 rounded">
+                  class="w-full bg-card-bg border-2 border-border-color px-3 py-2 rounded-lg focus:border-primary focus:outline-none transition-colors">
+                <p v-if="slot.startTime" class="text-xs text-gray-500 mt-2 mr-1">⏰ شروع: {{ slot.startTime }}</p>
               </div>
               <div>
-                <label class="block text-sm mb-1">ساعت پایان</label>
+                <label class="block text-sm font-bold mb-2 text-primary">ساعت پایان</label>
                 <input type="time" v-model="slot.endTime"
-                  class="w-full bg-card-bg border border-border-color px-3 py-2 rounded">
+                  class="w-full bg-card-bg border-2 border-border-color px-3 py-2 rounded-lg focus:border-primary focus:outline-none transition-colors">
+                <div v-if="slot.endTime" class="mt-2">
+                  <p class="text-xs text-gray-500 mr-1">⏰ پایان: {{ slot.endTime }}</p>
+                  <p v-if="slot.startTime && slot.endTime" class="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-1 mr-1 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">
+                    ⏱️ مدت: {{ calculateDuration(slot.startTime, slot.endTime) }}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -127,7 +151,16 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api.js';
-import { inputToJalali } from '../utils/dateUtils.js';
+import PersianDatePicker from '../components/PersianDatePicker.vue';
+import { 
+  inputToJalali, 
+  inputToJalaliWithWeekDay, 
+  getPersianWeekDay, 
+  formatDefenseDate,
+  toJalaliWithWeekDay,
+  isWorkDay,
+  isFriday 
+} from '../utils/dateUtils.js';
 
 const year = ref(null);
 const termHalf = ref('1');
@@ -245,6 +278,28 @@ Authorization Header: ${res.data.headers.authorization}`);
   } catch (err) {
     console.error('❌ خطا در debug کاربر:', err);
     alert('خطا در debug کاربر: ' + (err.response?.data?.error || err.message));
+  }
+};
+
+// محاسبه مدت زمان بین دو ساعت
+const calculateDuration = (startTime, endTime) => {
+  if (!startTime || !endTime) return '0';
+  
+  const start = new Date(`2000-01-01T${startTime}`);
+  const end = new Date(`2000-01-01T${endTime}`);
+  
+  if (end <= start) return '0';
+  
+  const diffMinutes = (end - start) / (1000 * 60);
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  
+  if (hours === 0) {
+    return `${minutes} دقیقه`;
+  } else if (minutes === 0) {
+    return `${hours} ساعت`;
+  } else {
+    return `${hours} ساعت و ${minutes} دقیقه`;
   }
 };
 
