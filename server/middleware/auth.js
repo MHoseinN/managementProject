@@ -1,14 +1,32 @@
 import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
-export const authMiddleware = (req, res, next) => {
+export const authMiddleware = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'No token' });
   
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+    
+    // گرفتن اطلاعات کامل کاربر از دیتابیس
+    const user = await User.findById(decoded.id).lean();
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    req.user = {
+      id: user._id.toString(),
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      major: user.major,
+      nationalId: user.nationalId,
+      isApproved: user.isApproved
+    };
+    
     next();
-  } catch {
+  } catch (error) {
+    console.error('Auth middleware error:', error);
     res.status(401).json({ error: 'Invalid token' });
   }
 };
