@@ -2,14 +2,6 @@ import Project from '../models/Project.js';
 import DefenseSlot from '../models/DefenseSlot.js';
 import User from '../models/User.js';
 
-/**
- * Auto-schedule defenses for topic-approved projects
- * Algorithm ensures:
- * - advisor !== examiner
- * - 30-minute intervals
- * - One student per examiner per time slot
- * - Balance load across examiners
- */
 export const scheduleDefenses = async (req, res) => {
   try {
     const { term } = req.body;
@@ -69,19 +61,16 @@ export const scheduleDefenses = async (req, res) => {
       const examinerId = project.examinerId?._id?.toString();
 
       if (!advisorId || !examinerId) {
-        console.warn(`Project ${project._id} missing advisor or examiner`);
         continue;
       }
 
       if (advisorId === examinerId) {
-        console.warn(`Project ${project._id} has same advisor and examiner`);
         continue;
       }
 
       // Find available slot for this examiner
       const slots = availableSlots[examinerId];
       if (!slots || slots.length === 0) {
-        console.warn(`No available slots for examiner ${examinerId}`);
         continue;
       }
 
@@ -124,7 +113,6 @@ export const scheduleDefenses = async (req, res) => {
       total: projects.length
     });
   } catch (err) {
-    console.error('[scheduleDefenses] Error', err);
     res.status(500).json({ error: err.message });
   }
 };

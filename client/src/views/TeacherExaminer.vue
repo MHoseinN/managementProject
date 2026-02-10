@@ -38,36 +38,19 @@
 
 <script setup>
 import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import api from '../api.js';
 import { toJalali, formatDefenseDate, toJalaliWithWeekDay } from '../utils/dateUtils.js';
+import { useNavigation, useProjectStatus } from '../composables/useCommon.js';
 
+const { goBack } = useNavigation();
+const { getStatusText } = useProjectStatus();
 const examinerProjects = ref([]);
 const gradeMap = ref({});
-const router = useRouter();
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/teacher');
-  }
-};
 
 onMounted(() => {
   loadProjects();
 });
 
-function getStatusText(status) {
-  const statusMap = {
-    pending: 'در انتظار تایید',
-    active: 'فعال',
-    topic_approved: 'موضوع تایید شده',
-    scheduled: 'زمان دفاع تعیین شده',
-    defended: 'دفاع شده',
-    graded: 'نمره گذاری شده'
-  };
-  return statusMap[status] || status;
-}
 async function loadProjects() {
   try {
     const res = await api.get('/projects/examiner');

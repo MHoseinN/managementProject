@@ -1,76 +1,7 @@
 import Project from '../models/Project.js';
 import User from '../models/User.js';
 import Capacity from '../models/Capacity.js';
-import DefenseSlot from '../models/DefenseSlot.js';
-
-const assignBalancedExaminer = async ({ major, term, advisorId }) => {
-  const teachers = await User.find({ role: 'teacher', major }).lean();
-  const candidates = teachers.filter(t => String(t._id) !== String(advisorId));
-  if (!candidates.length) return null;
-
-  const candidateIds = candidates.map(t => String(t._id));
-  const counts = candidateIds.reduce((acc, id) => {
-    acc[id] = 0;
-    return acc;
-  }, {});
-
-  const existing = await Project.find({ term, examinerId: { $ne: null } }).select('examinerId').lean();
-  for (const p of existing) {
-    const key = String(p.examinerId);
-    if (counts[key] !== undefined) counts[key] += 1;
-  }
-
-  const sorted = candidateIds.slice().sort((a, b) => {
-    if (counts[a] !== counts[b]) return counts[a] - counts[b];
-    return a.localeCompare(b);
-  });
-
-  return sorted[0] || null;
-};
-
-const findAvailableSlotForExaminer = async ({ examinerId, term }) => {
-  const slots = await DefenseSlot.find({ examinerId, term });
-  for (const s of slots) {
-    for (const pd of s.proposedDates || []) {
-      for (const t of (pd.timeSlots || [])) {
-        const taken = (s.approvedSlots || []).some(as => {
-          if (!as.date || !pd.date) return false;
-          const sameDay = new Date(as.date).toISOString().slice(0, 10) === new Date(pd.date).toISOString().slice(0, 10);
-          return sameDay && as.time === t;
-        });
-        if (!taken) {
-          return { slotId: s._id, date: pd.date, time: t };
-        }
-      }
-    }
-  }
-  return null;
-};
-
-const scheduleProjectIfPossible = async ({ project }) => {
-  if (!project || project.defenseDate || project.status !== 'topic_approved') return project;
-  if (!project.examinerId) return project;
-
-  const chosen = await findAvailableSlotForExaminer({ examinerId: project.examinerId, term: project.term });
-  if (!chosen) return project;
-
-  project.defenseDate = chosen.date;
-  project.defenseTime = chosen.time;
-  project.status = 'scheduled';
-  await project.save();
-
-  await DefenseSlot.findByIdAndUpdate(chosen.slotId, {
-    $push: {
-      approvedSlots: {
-        date: chosen.date,
-        time: chosen.time,
-        studentId: project.studentId?._id || project.studentId
-      }
-    }
-  });
-
-  return project;
-};
+import { assignBalancedExaminer, scheduleProjectIfPossible } from '../utils/projectHelpers.js';
 
 export const enrollProject = async (req, res) => {
   try {
@@ -78,7 +9,6 @@ export const enrollProject = async (req, res) => {
     const studentId = req.user.id;
     const major = req.user.major;
     if (!term) {
-      console.warn('[enrollProject] Missing term in request body');
       return res.status(400).json({ error: 'Term is required (e.g., 1404-1)', term });
     }
     if (!advisorId) {
@@ -93,14 +23,6 @@ export const enrollProject = async (req, res) => {
     // Check capacity
     const capacity = await Capacity.findOne({ term, major });
     if (!capacity || capacity.enrolled >= capacity.capacity) {
-      console.warn('[enrollProject] No capacity', {
-        studentId,
-        major,
-        term,
-        found: !!capacity,
-        enrolled: capacity?.enrolled,
-        capacity: capacity?.capacity
-      });
       return res.status(400).json({
         error: 'No capacity available',
         term,
@@ -139,11 +61,9 @@ export const enrollProject = async (req, res) => {
       { _id: capacity._id, 'advisorLimits.advisorId': advisorId },
       { $inc: { enrolled: 1, 'advisorLimits.$.assigned': 1 } }
     );
-    console.log('[enrollProject] Enrolled project created', { studentId, term, projectId: project._id });
     
     res.json(project);
   } catch (err) {
-    console.error('[enrollProject] Error', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -172,10 +92,8 @@ export const assignAdvisorsExaminers = async (req, res) => {
 export const submitTopics = async (req, res) => {
   try {
     const { projectId, topics } = req.body;
-    console.log('[submitTopics] Received:', { projectId, topicsCount: topics?.length });
     
     if (!Array.isArray(topics) || topics.length < 2) {
-      console.log('[submitTopics] Invalid topics:', topics);
       return res.status(400).json({ error: 'حداقل دو موضوع باید ارسال شود' });
     }
 
@@ -197,11 +115,8 @@ export const submitTopics = async (req, res) => {
       .filter(t => t.name);
 
     if (sanitizedTopics.length < 2) {
-      console.log('[submitTopics] Not enough valid topics:', sanitizedTopics);
       return res.status(400).json({ error: 'حداقل دو موضوع معتبر وارد کنید' });
     }
-
-    console.log('[submitTopics] Updating project:', { projectId, sanitizedTopicsCount: sanitizedTopics.length });
 
     const project = await Project.findByIdAndUpdate(
       projectId,
@@ -210,11 +125,9 @@ export const submitTopics = async (req, res) => {
     );
 
     if (!project) {
-      console.log('[submitTopics] Project not found:', projectId);
       return res.status(404).json({ error: 'پروژه پیدا نشد' });
     }
 
-    console.log('[submitTopics] Success:', { projectId, newStatus: project.status });
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -323,7 +236,6 @@ export const getProjectById = async (req, res) => {
     
     res.json(project);
   } catch (err) {
-    console.error('[getProjectById] Error', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -350,7 +262,6 @@ export const rejectTopics = async (req, res) => {
     
     res.json({ message: 'Topics rejected. Student must submit new proposals.', project });
   } catch (err) {
-    console.error('[rejectTopics] Error', err);
     res.status(500).json({ error: err.message });
   }
 };

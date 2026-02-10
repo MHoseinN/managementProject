@@ -33,14 +33,18 @@
           <div class="mt-4">
             <h3 class="text-sm font-bold text-text-secondary mb-2">ظرفیت هر استاد</h3>
             <div v-if="advisorLimits.length" class="space-y-2">
-              <div v-for="advisor in advisorLimits" :key="advisor.advisorId" class="grid md:grid-cols-4 gap-3 items-center bg-card-bg p-3 rounded border border-border-color">
+              <div v-for="advisor in advisorLimits" :key="advisor.advisorId" class="grid md:grid-cols-5 gap-3 items-center bg-card-bg p-3 rounded border border-border-color">
                 <div class="md:col-span-2">
                   <p class="font-bold">{{ advisor.firstName }} {{ advisor.lastName }}</p>
-                  <p class="text-xs text-text-secondary">باقی‌مانده: {{ Math.max(0, (advisor.limit || 0) - (advisor.assigned || 0)) }}</p>
+                  <p class="text-xs text-text-secondary">باقی‌مانده راهنمایی: {{ Math.max(0, (advisor.limit || 0) - (advisor.assigned || 0)) }}</p>
                 </div>
                 <div>
                   <label class="block text-xs mb-1">ظرفیت راهنمایی</label>
                   <input v-model.number="advisor.limit" type="number" min="0" class="w-full bg-white border border-border-color px-3 py-2 rounded">
+                </div>
+                <div>
+                  <label class="block text-xs mb-1">ظرفیت داوری</label>
+                  <input v-model.number="advisor.examinerLimit" type="number" min="0" class="w-full bg-white border border-border-color px-3 py-2 rounded">
                 </div>
                 <div class="text-xs text-text-secondary">
                   اخذ شده: {{ advisor.assigned }}
@@ -154,9 +158,13 @@
 
 <script setup>
 import { computed, ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import api from '../api.js';
 import { toJalali, toJalaliWithWeekDay, formatDefenseDate } from '../utils/dateUtils.js';
+import { useNavigation, useJalaliYear, useTermLabel } from '../composables/useCommon.js';
+
+const { goBack } = useNavigation();
+const { getJalaliYear } = useJalaliYear();
+const { termLabel, termString } = useTermLabel();
 
 const year = ref(null);
 const termHalf = ref('1');
@@ -169,14 +177,6 @@ const slotFilterYear = ref(null);
 const slotFilterTermHalf = ref('1');
 const teachers = ref([]);
 const advisorLimits = ref([]);
-const router = useRouter();
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/');
-  }
-};
 
 const countTotalSlots = (slot) => {
   return (slot.proposedDates || []).reduce((sum, pd) => sum + (pd.timeSlots || []).length, 0);
@@ -198,28 +198,6 @@ const loadDefenseSlots = async () => {
   } catch (err) {
     console.error(err);
   }
-};
-
-const getJalaliYear = () => {
-  try {
-    const yFa = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric' }).format(new Date());
-    const faDigits = '۰۱۲۳۴۵۶۷۸۹';
-    const en = yFa.split('').map(ch => {
-      const idx = faDigits.indexOf(ch);
-      return idx >= 0 ? String(idx) : ch;
-    }).join('');
-    return parseInt(en, 10) || 1400;
-  } catch {
-    return 1404;
-  }
-};
-
-const termString = (yearVal, half) => `${yearVal}-${half}`;
-
-const termLabel = (term) => {
-  if (!term) return '-';
-  const [y, h] = String(term).split('-');
-  return `${h === '2' ? 'بهمن' : 'مهر'} ${y}`;
 };
 
 const totalAdvisorLimit = computed(() => {
@@ -258,6 +236,10 @@ const setCapacity = async () => {
       advisorLimits: advisorLimits.value.map(a => ({
         advisorId: a.advisorId,
         limit: a.limit
+      })),
+      examinerLimits: advisorLimits.value.map(a => ({
+        examinerId: a.advisorId,
+        limit: a.examinerLimit || a.limit || 0
       }))
     });
     alert('ظرفیت ثبت شد');
@@ -279,21 +261,31 @@ const loadTeachers = async () => {
 
 const buildAdvisorLimits = () => {
   const existing = currentCapacity.value?.advisorLimits || [];
+  const existingExaminers = currentCapacity.value?.examinerLimits || [];
+  
   const existingMap = existing.reduce((acc, item) => {
     acc[String(item.advisorId)] = item;
     return acc;
   }, {});
 
+  const examinerMap = existingExaminers.reduce((acc, item) => {
+    acc[String(item.examinerId)] = item;
+    return acc;
+  }, {});
+
   advisorLimits.value = teachers.value.map(t => {
     const match = existingMap[String(t._id)] || {};
+    const examinerMatch = examinerMap[String(t._id)] || {};
     const limit = Number(match.limit || 0);
     const assigned = Number(match.assigned || 0);
+    const examinerLimit = Number(examinerMatch.limit || 0);
     return {
       advisorId: t._id,
       firstName: t.firstName,
       lastName: t.lastName,
       limit,
-      assigned
+      assigned,
+      examinerLimit
     };
   });
 };

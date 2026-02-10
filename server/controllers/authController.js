@@ -42,37 +42,23 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    console.log('[LOGIN] Request received');
-    console.log('[LOGIN] req.body:', req.body);
-    
     const { nationalId, identityNumber } = req.body;
-    console.log('[LOGIN] Destructured:', { nationalId, identityNumber });
     
     if (!nationalId || !identityNumber) {
-      console.warn('[LOGIN] Missing required fields:', { nationalId, identityNumber });
       return res.status(400).json({ error: 'nationalId and identityNumber are required' });
     }
     
-    console.log('[LOGIN] Searching user:', { nationalId });
     const user = await User.findOne({ nationalId });
-    console.log('[LOGIN] User found:', user ? user._id : 'none');
-    
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
     
-    console.log('[LOGIN] Checking approval:', { isApproved: user.isApproved, role: user.role });
     if (!user.isApproved && user.role !== 'admin') {
       return res.status(403).json({ error: 'Not approved yet' });
     }
     
-    console.log('[LOGIN] Starting password compare...');
     const isValid = await bcrypt.compare(identityNumber, user.password);
-    console.log('[LOGIN] Password valid:', isValid);
-    
     if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
     
-    console.log('[LOGIN] Generating token...');
     const token = generateToken(user);
-    console.log('[LOGIN] Token generated');
     
     res.json({
       token,
@@ -84,10 +70,7 @@ export const login = async (req, res) => {
         major: user.major,
       }
     });
-    console.log('[LOGIN] Success response sent');
   } catch (err) {
-    console.error('[LOGIN] ERROR:', err.message);
-    console.error('[LOGIN] Stack:', err.stack);
     res.status(500).json({ error: err.message });
   }
 };

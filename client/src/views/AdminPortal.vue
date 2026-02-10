@@ -84,20 +84,13 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import api from '../api.js';
+import { useNavigation } from '../composables/useCommon.js';
 
+const { goBack } = useNavigation();
 const pendingUsers = ref([]);
 const approvedGrouped = ref({ student: {}, teacher: {}, manager: {} });
 const loading = ref(false);
-const router = useRouter();
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/');
-  }
-};
 
 const roleLabel = (role) => {
   const map = { student: 'دانشجو', teacher: 'استاد', manager: 'مدیر گروه', admin: 'ادمین' };

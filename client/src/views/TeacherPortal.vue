@@ -27,13 +27,7 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router';
-const router = useRouter();
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/');
-  }
-};
+import { useNavigation } from '../composables/useCommon.js';
+
+const { goBack } = useNavigation();
 </script>

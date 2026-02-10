@@ -56,21 +56,16 @@
 
 <script setup>
 import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import api from '../api.js';
+import { useNavigation, useJalaliYear, useProjectStatus } from '../composables/useCommon.js';
 
+const { goBack } = useNavigation();
+const { getJalaliYear } = useJalaliYear();
+const { getStatusText } = useProjectStatus();
 const advisorProjects = ref([]);
 const advisorCapacity = ref(null);
 const year = ref(null);
 const termHalf = ref('1');
-const router = useRouter();
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/teacher');
-  }
-};
 
 onMounted(() => {
   loadProjects();
@@ -78,22 +73,6 @@ onMounted(() => {
   loadAdvisorCapacity();
 });
 
-function getJalaliYear() {
-  try {
-    const yFa = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric' }).format(new Date());
-    const faDigits = '۰۱۲۳۴۵۶۷۸۹';
-    const en = yFa
-      .split('')
-      .map(ch => {
-        const idx = faDigits.indexOf(ch);
-        return idx >= 0 ? String(idx) : ch;
-      })
-      .join('');
-    return parseInt(en, 10) || 1400;
-  } catch {
-    return 1404;
-  }
-}
 async function loadAdvisorCapacity() {
   try {
     if (!year.value) return;
@@ -104,18 +83,6 @@ async function loadAdvisorCapacity() {
     advisorCapacity.value = null;
     console.error(err);
   }
-}
-
-function getStatusText(status) {
-  const statusMap = {
-    pending: 'در انتظار تایید',
-    active: 'فعال',
-    topic_approved: 'موضوع تایید شده',
-    scheduled: 'زمان دفاع تعیین شده',
-    defended: 'دفاع شده',
-    graded: 'نمره گذاری شده'
-  };
-  return statusMap[status] || status;
 }
 async function loadProjects() {
   try {

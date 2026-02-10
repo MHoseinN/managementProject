@@ -287,7 +287,6 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import api from '../api.js';
 import { 
   toJalali, 
@@ -297,8 +296,12 @@ import {
 } from '../utils/dateUtils.js';
 import MessageThread from '../components/MessageThread.vue';
 import ReportList from '../components/ReportList.vue';
+import { useNavigation, useJalaliYear, useProjectStatus, useTermLabel } from '../composables/useCommon.js';
 
-const router = useRouter();
+const { goBack } = useNavigation();
+const { getJalaliYear } = useJalaliYear();
+const { getStatusText } = useProjectStatus();
+const { termLabel, termString } = useTermLabel();
 const project = ref(null);
 const reports = ref([]);
 const messages = ref([]);
@@ -315,13 +318,6 @@ const selectedAdvisorId = ref('');
 const reportTitle = ref('');
 const reportDescription = ref('');
 const reportFile = ref(null);
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/');
-  }
-};
 
 onMounted(() => {
   loadProject();
@@ -356,16 +352,7 @@ const approvedTopicTitle = computed(() => {
   return topicVal;
 });
 const statusLabel = computed(() => {
-  const map = {
-    pending: 'در انتظار تایید',
-    active: 'آماده ارسال موضوعات',
-    topic_submitted: 'موضوع ارسال شده - منتظر تایید استاد راهنما',
-    topic_approved: 'موضوع تایید شده',
-    scheduled: 'زمان بندی دفاع',
-    defended: 'دفاع شده',
-    graded: 'نمره ثبت شده'
-  };
-  return map[project.value?.status] || project.value?.status || '-';
+  return getStatusText(project.value?.status);
 });
 const isTopicApproved = computed(() => {
   const approvedStatuses = ['topic_approved', 'scheduled', 'defended', 'graded'];
@@ -396,23 +383,6 @@ const managerMessages = computed(() => filterMessagesById(project.value?.manager
 const advisorMessages = computed(() => filterMessagesById(project.value?.advisorId));
 const examinerMessages = computed(() => filterMessagesById(project.value?.examinerId));
 const selectedTermLabel = computed(() => termLabel(termString(year.value, termHalf.value)));
-
-function getJalaliYear() {
-  try {
-    const yFa = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric' }).format(new Date());
-    const faDigits = '۰۱۲۳۴۵۶۷۸۹';
-    const en = yFa
-      .split('')
-      .map(ch => {
-        const idx = faDigits.indexOf(ch);
-        return idx >= 0 ? String(idx) : ch;
-      })
-      .join('');
-    return parseInt(en, 10) || 1400;
-  } catch {
-    return 1404;
-  }
-}
 function getId(val) {
   return val?._id || val || null;
 }
@@ -424,15 +394,6 @@ function filterMessagesById(target) {
     const rId = getId(msg.receiverId);
     return sId === targetId || rId === targetId;
   });
-}
-function termString(yearVal, half) {
-  if (!yearVal) return '';
-  return `${yearVal}-${half}`;
-}
-function termLabel(term) {
-  if (!term) return '-';
-  const [y, h] = String(term).split('-');
-  return `${h === '2' ? 'بهمن' : 'مهر'} ${y}`;
 }
 async function enrollProject() {
   try {

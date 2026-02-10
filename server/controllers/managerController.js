@@ -2,147 +2,15 @@ import Capacity from '../models/Capacity.js';
 import Project from '../models/Project.js';
 import User from '../models/User.js';
 import DefenseSlot from '../models/DefenseSlot.js';
-
-// Helper: Find next available 30-min slot for an examiner (kept for future use)
-const findNextAvailableSlot = async (examinerId, startDate) => {
-  const slots = [
-    { hours: 8, minutes: 0 },
-    { hours: 8, minutes: 30 },
-    { hours: 9, minutes: 0 },
-    { hours: 9, minutes: 30 },
-    { hours: 10, minutes: 0 },
-    { hours: 10, minutes: 30 },
-    { hours: 11, minutes: 0 },
-    { hours: 11, minutes: 30 },
-    { hours: 13, minutes: 0 },
-    { hours: 13, minutes: 30 },
-    { hours: 14, minutes: 0 },
-    { hours: 14, minutes: 30 },
-    { hours: 15, minutes: 0 },
-    { hours: 15, minutes: 30 },
-    { hours: 16, minutes: 0 },
-    { hours: 16, minutes: 30 },
-  ];
-
-  let currentDate = new Date(startDate);
-  currentDate.setHours(0, 0, 0, 0);
-
-  for (let dayOffset = 0; dayOffset < 365; dayOffset++) {
-    const checkDate = new Date(currentDate);
-    checkDate.setDate(checkDate.getDate() + dayOffset);
-
-    if (checkDate.getDay() === 4 || checkDate.getDay() === 5) continue; // Skip Thu/Fri
-
-    for (const slot of slots) {
-      const slotStart = new Date(checkDate);
-      slotStart.setHours(slot.hours, slot.minutes, 0, 0);
-      const slotEnd = new Date(slotStart);
-      slotEnd.setMinutes(slotEnd.getMinutes() + 30);
-
-      const conflict = await DefenseSlot.findOne({
-        examinerId,
-        startTime: { $lt: slotEnd },
-        endTime: { $gt: slotStart },
-      });
-
-      if (!conflict) {
-        return { startTime: slotStart, endTime: slotEnd };
-      }
-    }
-  }
-
-  throw new Error('No available slots found for examiner');
-};
-
-// Helper: Assign advisor & examiner among teachers of the same major (load-balanced)
-const assignBalancedTeachers = async ({ major, term }) => {
-  const teachers = await User.find({ role: 'teacher', major }).lean();
-  if (!teachers.length || teachers.length < 2) {
-    throw new Error('Not enough teachers available for assignment');
-  }
-
-  const teacherIds = teachers.map(t => String(t._id));
-  const counts = teacherIds.reduce((acc, id) => {
-    acc[id] = { advisor: 0, examiner: 0 };
-    return acc;
-  }, {});
-
-  // Count current term assignments to balance load
-  const existing = await Project.find({ term, advisorId: { $ne: null } }).select('advisorId examinerId').lean();
-  for (const p of existing) {
-    if (p.advisorId && counts[String(p.advisorId)]) counts[String(p.advisorId)].advisor += 1;
-    if (p.examinerId && counts[String(p.examinerId)]) counts[String(p.examinerId)].examiner += 1;
-  }
-
-  // Choose advisor: min advisor count, tie-break by min examiner then by id
-  const sortedByAdvisor = teacherIds.slice().sort((a, b) => {
-    if (counts[a].advisor !== counts[b].advisor) return counts[a].advisor - counts[b].advisor;
-    if (counts[a].examiner !== counts[b].examiner) return counts[a].examiner - counts[b].examiner;
-    return a.localeCompare(b);
-  });
-
-  const advisorId = sortedByAdvisor[0];
-
-  // Choose examiner: min examiner count among others
-  const sortedByExaminer = teacherIds.filter(id => id !== advisorId).sort((a, b) => {
-    if (counts[a].examiner !== counts[b].examiner) return counts[a].examiner - counts[b].examiner;
-    if (counts[a].advisor !== counts[b].advisor) return counts[a].advisor - counts[b].advisor;
-    return a.localeCompare(b);
-  });
-
-  const examinerId = sortedByExaminer[0];
-
-  return { advisorId, examinerId };
-};
-
-// Helper: find first free slot for given examiner and term
-const findAvailableSlotForExaminer = async ({ examinerId, term }) => {
-  const slots = await DefenseSlot.find({ examinerId, term });
-  for (const s of slots) {
-    for (const pd of s.proposedDates || []) {
-      for (const t of (pd.timeSlots || [])) {
-        const taken = (s.approvedSlots || []).some(as => {
-          if (!as.date || !pd.date) return false;
-          const sameDay = new Date(as.date).toISOString().slice(0, 10) === new Date(pd.date).toISOString().slice(0, 10);
-          return sameDay && as.time === t;
-        });
-        if (!taken) {
-          return { slotId: s._id, date: pd.date, time: t };
-        }
-      }
-    }
-  }
-  return null;
-};
-
-const scheduleProjectIfPossible = async ({ project }) => {
-  if (!project || project.defenseDate || project.status !== 'topic_approved') return project;
-  if (!project.examinerId) return project;
-
-  const chosen = await findAvailableSlotForExaminer({ examinerId: project.examinerId, term: project.term });
-  if (!chosen) return project;
-
-  project.defenseDate = chosen.date;
-  project.defenseTime = chosen.time;
-  project.status = 'scheduled';
-  await project.save();
-
-  await DefenseSlot.findByIdAndUpdate(chosen.slotId, {
-    $push: {
-      approvedSlots: {
-        date: chosen.date,
-        time: chosen.time,
-        studentId: project.studentId?._id || project.studentId
-      }
-    }
-  });
-
-  return project;
-};
+import { 
+  assignBalancedTeachers, 
+  findAvailableSlotForExaminer, 
+  scheduleProjectIfPossible 
+} from '../utils/projectHelpers.js';
 
 export const setCapacity = async (req, res) => {
   try {
-    const { term, capacity, major, advisorLimits } = req.body;
+    const { term, capacity, major, advisorLimits, examinerLimits } = req.body;
     const managerId = req.user.id;
 
     if (!term || capacity === undefined || capacity === null) {
@@ -163,12 +31,20 @@ export const setCapacity = async (req, res) => {
       return res.status(400).json({ error: 'مجموع ظرفیت اساتید باید برابر ظرفیت کل باشد' });
     }
 
-    const advisors = await User.find({ role: 'teacher', major }).select('_id').lean();
-    const advisorSet = new Set(advisors.map(a => String(a._id)));
-    const invalidAdvisor = normalizedLimits.find(l => !advisorSet.has(String(l.advisorId)));
+    const teachers = await User.find({ role: 'teacher', major }).select('_id').lean();
+    const teacherSet = new Set(teachers.map(a => String(a._id)));
+    const invalidAdvisor = normalizedLimits.find(l => !teacherSet.has(String(l.advisorId)));
     if (invalidAdvisor) {
       return res.status(400).json({ error: 'استاد نامعتبر در لیست ظرفیت‌ها وجود دارد' });
     }
+
+    // نرمال‌سازی examinerLimits
+    const normalizedExaminerLimits = Array.isArray(examinerLimits)
+      ? examinerLimits.map(l => ({
+          examinerId: l.examinerId,
+          limit: Number(l.limit || 0)
+        }))
+      : [];
 
     let cap = await Capacity.findOne({ managerId, term, major });
     if (!cap) {
@@ -194,6 +70,20 @@ export const setCapacity = async (req, res) => {
     }
 
     cap.advisorLimits = nextAdvisorLimits;
+
+    // تنظیم examinerLimits
+    const assignedByExaminer = (cap.examinerLimits || []).reduce((acc, item) => {
+      acc[String(item.examinerId)] = item.assigned || 0;
+      return acc;
+    }, {});
+
+    const nextExaminerLimits = normalizedExaminerLimits.map(l => ({
+      examinerId: l.examinerId,
+      limit: l.limit,
+      assigned: assignedByExaminer[String(l.examinerId)] || 0
+    }));
+
+    cap.examinerLimits = nextExaminerLimits;
     
     await cap.save();
     res.json(cap);

@@ -1,6 +1,5 @@
 import DefenseSlot from "../models/DefenseSlot.js";
 import Project from "../models/Project.js";
-import DefenseSlotModel from "../models/DefenseSlot.js";
 import Capacity from "../models/Capacity.js";
 
 const getRequiredSlotsForTerm = async ({ term, major }) => {
@@ -14,46 +13,31 @@ const getRequiredSlotsForTerm = async ({ term, major }) => {
 };
 
 const checkCapacityExists = async ({ term, major }) => {
-  console.log('🔍 checkCapacityExists called with:', { term, major });
   if (!term || !major) {
-    console.log('❌ Missing term or major');
     return false;
   }
   try {
     const capacity = await Capacity.findOne({ term, major }).lean();
-    console.log('🔍 Found capacity:', capacity ? 'YES' : 'NO');
-    if (capacity) {
-      console.log('📊 Capacity examinerLimits length:', capacity.examinerLimits?.length || 0);
-    }
     const result = capacity && Array.isArray(capacity.examinerLimits) && capacity.examinerLimits.length > 0;
-    console.log('✅ checkCapacityExists result:', result);
     return result;
   } catch (error) {
-    console.error('❌ Error in checkCapacityExists:', error);
     return false;
   }
 };
 
 const getUserExaminerCapacity = async ({ term, major, examinerId }) => {
-  console.log('👤 getUserExaminerCapacity called with:', { term, major, examinerId });
   if (!term || !major || !examinerId) {
-    console.log('❌ Missing required parameters');
     return 0;
   }
   try {
     const capacity = await Capacity.findOne({ term, major }).lean();
     if (!capacity || !Array.isArray(capacity.examinerLimits)) {
-      console.log('❌ No capacity or examinerLimits found');
       return 0;
     }
-    console.log('🔍 ExaminerLimits:', capacity.examinerLimits.map(el => ({ id: el.examinerId.toString(), limit: el.limit })));
     const examinerLimit = capacity.examinerLimits.find(el => el.examinerId.toString() === examinerId.toString());
-    console.log('🎯 Found examiner limit:', examinerLimit);
     const result = examinerLimit ? Number(examinerLimit.limit || 0) : 0;
-    console.log('✅ getUserExaminerCapacity result:', result);
     return result;
   } catch (error) {
-    console.error('❌ Error in getUserExaminerCapacity:', error);
     return 0;
   }
 };
@@ -176,7 +160,7 @@ export const submitDefenseSlots = async (req, res) => {
 // زمان‌بندی پروژه‌های بدون تاریخ برای یک داور و ترم مشخص
 const autoScheduleForExaminer = async ({ examinerId, term }) => {
   // جمع‌آوری اسلات‌های در دسترس
-  const slots = await DefenseSlotModel.find({ examinerId, term });
+  const slots = await DefenseSlot.find({ examinerId, term });
   const available = [];
   for (const s of slots) {
     for (const pd of s.proposedDates || []) {
@@ -211,7 +195,7 @@ const autoScheduleForExaminer = async ({ examinerId, term }) => {
     project.status = "scheduled";
     await project.save();
 
-    await DefenseSlotModel.findByIdAndUpdate(chosen.slotId, {
+    await DefenseSlot.findByIdAndUpdate(chosen.slotId, {
       $push: {
         approvedSlots: {
           date: chosen.date,
@@ -251,22 +235,12 @@ export const getDefenseSlotsForTerm = async (req, res) => {
 export const getSlotRequirements = async (req, res) => {
   try {
     const { term } = req.query;
-    console.log('📋 getSlotRequirements called for term:', term);
-    console.log('👤 User info:', {
-      id: req.user.id,
-      major: req.user.major,
-      role: req.user.role,
-      firstName: req.user.firstName,
-      lastName: req.user.lastName
-    });
     
     if (!term) {
-      console.log('❌ No term provided');
       return res.status(400).json({ error: "ترم مشخص نشده است" });
     }
 
     if (!req.user || !req.user.major) {
-      console.log('❌ No user major found');
       return res.status(400).json({ error: "اطلاعات کاربر کامل نیست" });
     }
 
@@ -275,11 +249,8 @@ export const getSlotRequirements = async (req, res) => {
       term,
       major: req.user.major,
     });
-    
-    console.log('🔍 Capacity exists check result:', capacityExists);
 
     if (!capacityExists) {
-      console.log('❌ No capacity found for term:', term, 'major:', req.user.major);
       return res.json({
         term,
         capacityExists: false,
@@ -296,16 +267,12 @@ export const getSlotRequirements = async (req, res) => {
       term,
       major: req.user.major,
     });
-    
-    console.log('📊 Required slots:', requiredSlots);
 
     const userCapacity = await getUserExaminerCapacity({
       term,
       major: req.user.major,
       examinerId: req.user.id
     });
-    
-    console.log('👤 User capacity:', userCapacity);
 
     // اسلات‌های فعلی همه اساتید
     const allSlots = await DefenseSlot.find({ term });
@@ -314,8 +281,6 @@ export const getSlotRequirements = async (req, res) => {
     // اسلات‌های فعلی این استاد
     const userSlots = await DefenseSlot.findOne({ examinerId: req.user.id, term });
     const mySlots = userSlots ? countTotalSlots([userSlots]) : 0;
-    
-    console.log('🎯 User current slots:', mySlots);
 
     const result = {
       term,
@@ -332,10 +297,8 @@ export const getSlotRequirements = async (req, res) => {
         : `شما باید حداقل ${requiredSlots} اسلات (${requiredSlots/2} ساعت) پیشنهاد دهید. در حال حاضر ${mySlots} اسلات (${mySlots/2} ساعت) پیشنهاد داده‌اید.`
     };
     
-    console.log('✅ Sending response:', result);
     res.json(result);
   } catch (err) {
-    console.error('❌ Error in getSlotRequirements:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -407,22 +370,18 @@ export const getCapacityDetails = async (req, res) => {
 export const testCapacityStatus = async (req, res) => {
   try {
     const { term } = req.query;
-    console.log('🧪 Testing capacity status for:', { term, major: req.user.major, userId: req.user.id });
     
     // گرفتن تمام ظرفیت‌های موجود
     const allCapacities = await Capacity.find({}).lean();
-    console.log('📊 All capacities in DB:', allCapacities.map(c => ({ term: c.term, major: c.major, examinerCount: c.examinerLimits?.length })));
     
     // گرفتن ظرفیت مخصوص این ترم و رشته
     const specificCapacity = await Capacity.findOne({ term, major: req.user.major }).lean();
-    console.log('🎯 Specific capacity:', specificCapacity);
     
     // بررسی وجود کاربر در لیست داوران
     let userInList = false;
     if (specificCapacity && specificCapacity.examinerLimits) {
       userInList = specificCapacity.examinerLimits.some(el => el.examinerId.toString() === req.user.id.toString());
     }
-    console.log('👤 User in examiner list:', userInList);
     
     res.json({
       term,
@@ -435,7 +394,6 @@ export const testCapacityStatus = async (req, res) => {
       allCapacities: allCapacities.map(c => ({ term: c.term, major: c.major }))
     });
   } catch (err) {
-    console.error('❌ Test capacity status error:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -443,9 +401,6 @@ export const testCapacityStatus = async (req, res) => {
 // endpoint ساده برای چک کردن اطلاعات کاربر
 export const debugUserInfo = async (req, res) => {
   try {
-    console.log('🔍 Debug user info called');
-    console.log('👤 Full req.user:', req.user);
-    
     res.json({
       user: req.user,
       headers: {
@@ -455,7 +410,6 @@ export const debugUserInfo = async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (err) {
-    console.error('❌ Debug user info error:', err);
     res.status(500).json({ error: err.message });
   }
 };
