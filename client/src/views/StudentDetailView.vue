@@ -217,6 +217,67 @@
             download-text="دانلود فایل"
           />
         </div>
+
+        <!-- Messaging Section -->
+        <div class="card">
+          <h2 class="text-xl font-bold mb-4 text-primary flex items-center">
+            <span class="ml-2">💬</span>
+            گفتگو با این دانشجو
+          </h2>
+
+          <div v-if="messagesError" class="bg-red-900/30 border border-red-600/60 rounded-lg p-3 mb-4">
+            <p class="text-red-200 text-sm">{{ messagesError }}</p>
+          </div>
+
+          <div v-if="messagesLoading" class="text-center text-text-secondary py-6">
+            در حال بارگذاری پیام‌ها...
+          </div>
+
+          <div v-else>
+            <div v-if="orderedMessages.length === 0"
+              class="bg-dark-green/10 border border-dark-green/40 rounded-lg p-4 text-center text-text-secondary">
+              هنوز پیامی رد و بدل نشده است.
+            </div>
+            <div v-else class="max-h-72 overflow-y-auto space-y-3 mb-4">
+              <div
+                v-for="msg in orderedMessages"
+                :key="msg._id"
+                :class="[
+                  'p-3 rounded-lg border transition',
+                  isOwnMessage(msg)
+                    ? 'bg-dark-green/20 border-dark-green/50 text-light-green'
+                    : 'bg-primary-lighter border-primary-light/40 text-text-primary'
+                ]"
+              >
+                <div class="flex items-center justify-between text-xs text-text-secondary mb-1">
+                  <span>{{ msg.senderId?.firstName }} {{ msg.senderId?.lastName }}</span>
+                  <span>{{ formatMessageDate(msg.createdAt) }}</span>
+                </div>
+                <p class="text-sm text-text-primary whitespace-pre-line">{{ msg.content }}</p>
+              </div>
+            </div>
+
+            <div class="border-t border-border-color pt-4">
+              <label class="block text-sm font-bold mb-2">
+                پیام جدید برای {{ project.studentId?.firstName }} {{ project.studentId?.lastName }}
+              </label>
+              <textarea
+                v-model="newTeacherMessage"
+                rows="3"
+                class="w-full bg-dark-bg border border-border-color px-4 py-3 rounded-lg resize-none"
+                placeholder="پیام خود را بنویسید..."
+              ></textarea>
+              <button
+                @click="sendMessageToStudent"
+                class="btn-primary w-full mt-3"
+                :disabled="!canSendMessage || sendingMessage"
+                :class="{ 'opacity-50 cursor-not-allowed': !canSendMessage || sendingMessage }"
+              >
+                {{ sendingMessage ? 'در حال ارسال...' : 'ارسال پیام' }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -226,7 +287,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api.js';
-import { toJalali, formatDefenseDate, toFullPersianDate } from '../utils/dateUtils.js';
+import { formatDefenseDate, toJalaliWithWeekDay } from '../utils/dateUtils.js';
 import ReportList from '../components/ReportList.vue';
 
 
@@ -236,12 +297,28 @@ const error = ref(null);
 const selectedTopic = ref('');
 const customTopic = ref('');
 const reports = ref([]);
+const messages = ref([]);
+const messagesLoading = ref(false);
+const messagesError = ref(null);
+const newTeacherMessage = ref('');
+const sendingMessage = ref(false);
+const currentUser = ref(JSON.parse(localStorage.getItem('user') || '{}'));
 const route = useRoute();
 const router = useRouter();
 
 const canApprove = computed(() => {
   return selectedTopic.value.trim() !== '' || customTopic.value.trim() !== '';
 });
+
+const canSendMessage = computed(() => {
+  return Boolean(project.value?._id) && newTeacherMessage.value.trim().length > 0;
+});
+
+const orderedMessages = computed(() => {
+  return [...messages.value].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+});
+
+const currentUserId = computed(() => currentUser.value?.id || null);
 
 onMounted(() => {
   loadProjectDetails();
@@ -263,6 +340,7 @@ async function loadProjectDetails() {
     console.log('Project topic:', project.value.topic);
     console.log('Project status:', project.value.status);
     await loadReports();
+    await loadMessages();
 
   } catch (err) {
     console.error('Error loading project:', err);
@@ -279,6 +357,21 @@ async function loadReports() {
     reports.value = res.data;
   } catch (err) {
     console.error('Error loading reports:', err);
+  }
+}
+
+async function loadMessages() {
+  try {
+    if (!project.value?._id) return;
+    messagesLoading.value = true;
+    messagesError.value = null;
+    const res = await api.get(`/messages/project/${project.value._id}`);
+    messages.value = res.data;
+  } catch (err) {
+    console.error('Error loading messages:', err);
+    messagesError.value = err.response?.data?.error || 'خطا در بارگذاری پیام‌ها';
+  } finally {
+    messagesLoading.value = false;
   }
 }
 async function approveTopic() {
@@ -327,6 +420,31 @@ async function rejectTopics() {
 function goBack() {
   router.push('/teacher');
 }
+async function sendMessageToStudent() {
+  if (!canSendMessage.value || sendingMessage.value) return;
+
+  const studentId = resolveId(project.value?.studentId);
+  if (!studentId) {
+    alert('شناسه دانشجو یافت نشد');
+    return;
+  }
+
+  try {
+    sendingMessage.value = true;
+    await api.post('/messages/send', {
+      receiverId: studentId,
+      projectId: project.value._id,
+      content: newTeacherMessage.value.trim()
+    });
+    newTeacherMessage.value = '';
+    await loadMessages();
+  } catch (err) {
+    console.error('Error sending message:', err);
+    alert(err.response?.data?.error || 'خطا در ارسال پیام');
+  } finally {
+    sendingMessage.value = false;
+  }
+}
 function getMajorName(major) {
   const majors = {
     'computer': 'کامپیوتر',
@@ -363,6 +481,25 @@ function getStatusClass(status) {
     'graded': 'bg-green-700/20 text-green-300'
   };
   return classMap[status] || 'bg-gray-600/20 text-gray-400';
+}
+function resolveId(entity) {
+  if (!entity) return null;
+  if (typeof entity === 'string') return entity;
+  if (typeof entity === 'object') {
+    if (entity._id) return entity._id.toString();
+    if (entity.id) return entity.id.toString();
+  }
+  return null;
+}
+function isOwnMessage(msg) {
+  const senderId = resolveId(msg?.senderId);
+  return senderId && senderId === currentUserId.value;
+}
+function formatMessageDate(date) {
+  if (!date) return '';
+  const jsDate = new Date(date);
+  const time = jsDate.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  return `${toJalaliWithWeekDay(jsDate)} - ${time}`;
 }
 
 </script>

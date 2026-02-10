@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.post('/send', authMiddleware, msgCtrl.sendMessage);
 router.get('/', authMiddleware, msgCtrl.getMessages);
+router.get('/project/:projectId', authMiddleware, msgCtrl.getProjectMessages);
 router.post('/read', authMiddleware, msgCtrl.markAsRead);
 
 export default router;
